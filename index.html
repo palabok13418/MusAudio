@@ -3491,11 +3491,7 @@
         const w = doorOpenPopup('mus_test_animated_artwork', 680, 680);
         if (!w) { try { siteSays('Popup was blocked.'); } catch {} return; }
         const safeSrc = motion.replace(/"/g,'&quot;');
-  <!-- Vercel Speed Insights -->
-  <script>
-    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-  </script>
-  <script defer src="/_vercel/speed-insights/script.js"></script>
+
         const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Animated Artwork</title><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;background:#000}</style></head><body><video autoplay muted loop playsinline preload="auto" src="${safeSrc}"></video></body></html>`;
         doorWritePopup(w, html);
         try { w.focus(); } catch {}
