@@ -3491,6 +3491,11 @@
         const w = doorOpenPopup('mus_test_animated_artwork', 680, 680);
         if (!w) { try { siteSays('Popup was blocked.'); } catch {} return; }
         const safeSrc = motion.replace(/"/g,'&quot;');
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
         const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Animated Artwork</title><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;background:#000}</style></head><body><video autoplay muted loop playsinline preload="auto" src="${safeSrc}"></video></body></html>`;
         doorWritePopup(w, html);
         try { w.focus(); } catch {}
@@ -3672,6 +3677,11 @@
             }, 280);
           }
           start();
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
         })();${close}</body></html>`;
         doorWritePopup(w, html);
         try { w.focus(); } catch {}
@@ -3698,6 +3708,11 @@
             try {
               const bridge = OPEN + '(function(){try{const send=(p)=>{try{parent.postMessage({type:\'clocked_console\',payload:p},\'*\');}catch{}};const wrap=(lvl)=>{const orig=console[lvl];console[lvl]=function(){try{send({level:lvl,args:Array.from(arguments).map(a=>{try{return String(a);}catch{return "[unprintable]";}})});}catch{};try{orig&&orig.apply(console,arguments);}catch{}};};["log","warn","error"].forEach(wrap);window.addEventListener("error",(e)=>{try{send({level:"error",message:String(e.message||""),filename:String(e.filename||""),lineno:e.lineno||0,colno:e.colno||0,stack:e.error&&e.error.stack?String(e.error.stack):""});}catch{}});window.addEventListener("unhandledrejection",(e)=>{try{const r=e.reason;send({level:"error",message:"Unhandled promise rejection",stack:r&&r.stack?String(r.stack):String(r||"")});}catch{}});}catch{}})();' + CLOSE;
               const src = String(html||'');
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
               if (src.includes('</body>')) return src.replace('</body>', bridge + '</body>');
               return src + bridge;
             } catch { return String(html||''); }
@@ -3716,6 +3731,11 @@
               }
             } catch {}
           });
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
         })();${close}</body></html>`;
         doorWritePopup(previewWin, previewHtml);
 
@@ -3873,6 +3893,11 @@
             } catch {}
           }
           const fs = { type:'dir', children:{
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
             'index.html': { type:'file', content:'<!doctype html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width,initial-scale=1">\n  <title>Clocked Event</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <h1>Hello</h1>\n  <script src="app.js"></scr'+'ipt>\n</body>\n</html>\n' },
             'styles.css': { type:'file', content:'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px;background:#0b0f17;color:#e5e7eb}\n' },
             'app.js': { type:'file', content:'console.log("clocked_event ready");\n' },
@@ -4125,6 +4150,11 @@
             }
             if (js) {
               const safeJs = js.replace(/<\//g,'<\\/');
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
               if (out.includes('</body>')) out = out.replace('</body>', '<script>' + safeJs + close + '</body>');
               else out = out + '<script>' + safeJs + close;
             }
@@ -4220,6 +4250,11 @@
           renderTree();
           openFile('index.html');
           setTimeout(()=>{ try { pushPreview(); } catch {} }, 50);
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
         })();${close}</body></html>`;
 
         doorWritePopup(editorWin, editorHtml);
@@ -4346,6 +4381,11 @@
               detail.textContent = 'Activation failed.';
             }
           });
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
         })();${close}</body></html>`;
         doorWritePopup(w, html);
         try { w.focus(); } catch {}
@@ -10564,6 +10604,11 @@ void main(){
         const w = window.open('', 'mus_light_white', 'popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=520,height=360');
         if (!w) return false;
         __lightAssist.popup = w;
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
         const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Light</title><style>html,body{margin:0;height:100%;background:#fff;}#hud{position:fixed;left:0;right:0;bottom:0;padding:12px;display:flex;gap:10px;justify-content:center;}button{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;padding:10px 14px;border-radius:12px;border:1px solid rgba(0,0,0,.18);background:rgba(255,255,255,.92);color:#111;cursor:pointer;}button:active{transform:translateY(1px);}</style></head><body><div id="hud"><button id="fs">Fullscreen</button><button id="close">Close</button></div><script>document.getElementById('fs').addEventListener('click',()=>{try{document.documentElement.requestFullscreen()}catch{}});document.getElementById('close').addEventListener('click',()=>{try{window.close()}catch{}});${'</scr'+'ipt>'}</body></html>`;
         w.document.open();
         w.document.write(html);
@@ -14762,5 +14807,10 @@ void main(){
   <div id="idleOverlay" class="idle-overlay" aria-hidden="true">
     <video id="idleVideo" class="idle-video" playsinline muted></video>
   </div>
+  <!-- Vercel Speed Insights -->
+  <script>
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
 </body>
 </html>
