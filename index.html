@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MusAudio</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__title">MusAudio</div>
+        <div class="brand__subtitle">Local player + lyrics</div>
+      </div>
+
+      <div class="topbar__actions">
+        <label class="file">
+          <input id="files" type="file" accept="audio/*" multiple />
+          <span>Select audio files</span>
+        </label>
+        <a class="btn" href="./musaumz.html">Pro Player</a>
+        <button id="openSettings" class="btn" type="button">Settings</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="panel__header">
+          <div class="panel__title">Queue</div>
+          <div id="queueMeta" class="panel__meta">0 tracks</div>
+        </div>
+        <div id="queue" class="queue"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <div class="panel__title">Now Playing</div>
+          <div id="nowMeta" class="panel__meta">—</div>
+        </div>
+
+        <div class="player">
+          <div class="player__row">
+            <button id="prev" class="btn" type="button">Prev</button>
+            <button id="toggle" class="btn btn--primary" type="button">Play</button>
+            <button id="next" class="btn" type="button">Next</button>
+          </div>
+
+          <div class="player__row">
+            <div class="time" id="time">0:00 / 0:00</div>
+            <input id="seek" class="seek" type="range" min="0" max="1000" value="0" />
+          </div>
+
+          <div class="player__row">
+            <div class="vol">
+              <div class="vol__label">Volume</div>
+              <input id="vol" type="range" min="0" max="1" step="0.01" value="1" />
+            </div>
+            <button id="lyricsBtn" class="btn" type="button">Fetch lyrics</button>
+          </div>
+        </div>
+
+        <div class="lyrics">
+          <div class="lyrics__header">
+            <div class="lyrics__title">Lyrics</div>
+            <div id="lyricsMeta" class="lyrics__meta">—</div>
+          </div>
+          <pre id="lyrics" class="lyrics__body"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="settings" class="settings">
+    <form method="dialog" class="settings__card">
+      <div class="settings__header">
+        <div class="settings__title">Settings</div>
+        <button class="btn" value="close" type="submit">Close</button>
+      </div>
+
+      <div class="settings__grid">
+        <label class="field">
+          <div class="field__label">Apple Music storefront</div>
+          <input id="storefront" type="text" placeholder="us" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <div class="field__label">Apple Music developer token</div>
+          <input id="devToken" type="password" placeholder="Bearer token" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <div class="field__label">Apple Music user token</div>
+          <input id="userToken" type="password" placeholder="Music-User-Token" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <div class="field__label">Proxy</div>
+          <div class="field__hint">This site provides built-in proxy endpoints at <code>/amp</code> and <code>/health</code>.</div>
+        </label>
+      </div>
+
+      <div class="settings__footer">
+        <button id="testProxy" class="btn" type="button">Test API</button>
+        <div id="settingsStatus" class="status">—</div>
+      </div>
+    </form>
+  </dialog>
+
+  <audio id="audio" preload="metadata"></audio>
+  <script src="./app.js"></script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>

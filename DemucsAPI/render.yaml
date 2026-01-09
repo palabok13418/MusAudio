@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: demucs-api
+    env: docker
+    healthCheckPath: /health
+    autoDeploy: true
