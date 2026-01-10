@@ -2,6 +2,10 @@
   "rewrites": [
     { "source": "/amp", "destination": "/api/amp" },
     { "source": "/health", "destination": "/api/health" },
+    { "source": "/engine", "destination": "/api/engine" },
+    { "source": "/decode", "destination": "/api/decode" },
+    { "source": "/pwa-icon-192.png", "destination": "/api/pwa-icon?size=192" },
+    { "source": "/pwa-icon-512.png", "destination": "/api/pwa-icon?size=512" },
     { "source": "/demucs/files/:path*", "destination": "/api/demucs/files?path=:path*" },
     { "source": "/demucs/:path*", "destination": "/api/demucs/:path*" },
     { "source": "/pro", "destination": "/musaumz.html" },

@@ -1,0 +1,26 @@
+node_modules
+
+# Build outputs
+.dist
+dist
+
+# Vercel
+.vercel
+
+# Netlify
+.netlify
+
+# Cloudflare
+.wrangler
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lockfiles (keep if you want reproducible builds)
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock

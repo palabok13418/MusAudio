@@ -1,0 +1,17 @@
+node_modules
+.dist
+dist
+.vercel
+.netlify
+.wrangler
+coverage
+.DS_Store
+*.log
+
+# Generated / build artifacts
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Large vendor files
+**/*.min.js

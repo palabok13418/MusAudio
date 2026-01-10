@@ -8,7 +8,7 @@ function corsHeaders(origin, methods) {
     'Access-Control-Allow-Origin': allow,
     'Vary': 'Origin',
     'Access-Control-Allow-Methods': methods,
-    'Access-Control-Allow-Headers': 'Content-Type,Accept,Range,If-None-Match,If-Modified-Since',
+    'Access-Control-Allow-Headers': 'Content-Type,Accept,Range,If-None-Match,If-Modified-Since,X-Filename',
     'Cache-Control': 'no-store',
   };
 }

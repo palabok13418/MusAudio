@@ -11,3 +11,13 @@
   from = "/health"
   to = "/.netlify/functions/health"
   status = 200
+
+[[redirects]]
+  from = "/engine"
+  to = "/.netlify/functions/engine"
+  status = 200
+
+[[redirects]]
+  from = "/decode"
+  to = "/.netlify/functions/decode"
+  status = 200

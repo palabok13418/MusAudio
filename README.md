@@ -1,4 +1,4 @@
-# MusAudio — For Now
+# MusAudio — Website Version (Multi-deployer)
 
 This folder is the **deploy root** for the public MusAudio website + API.
 

@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, UploadFile, Request
+from fastapi import FastAPI, File, UploadFile, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 
@@ -31,7 +31,7 @@ def _safe_ext(name: str) -> str:
     if not m:
         return "bin"
     ext = m.group(1)
-    if ext in {"wav", "mp3", "flac", "m4a", "aac", "ogg", "opus", "webm"}:
+    if ext in {"wav", "mp3", "flac", "m4a", "mp4", "aac", "ogg", "opus", "webm", "ac3", "eac3", "ec3", "ac4"}:
         return ext
     return "bin"
 
@@ -75,6 +75,125 @@ _jobs: Dict[str, Job] = {}
 @app.get("/health")
 async def health() -> Dict[str, Any]:
     return {"ok": True, "service": "demucs", "model": "htdemucs_6s"}
+
+
+@app.post("/decode")
+async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileResponse:
+    fn = req.headers.get("x-filename", "")
+    try:
+        fn = fn.strip()
+    except Exception:
+        fn = ""
+
+    ext = _safe_ext(fn)
+    job_id = uuid.uuid4().hex
+    in_path = UPLOADS / f"decode_{job_id}.{ext}"
+    fmt = str(req.query_params.get("format") or "wav").strip().lower()
+    if fmt not in {"wav", "m4a", "mp3"}:
+        fmt = "wav"
+
+    out_ext = "wav" if fmt == "wav" else ("mp3" if fmt == "mp3" else "m4a")
+    out_path = JOBS / f"decode_{job_id}.{out_ext}"
+
+    try:
+        total = 0
+        with in_path.open("wb") as f:
+            async for chunk in req.stream():
+                if not chunk:
+                    continue
+                f.write(chunk)
+                total += len(chunk)
+        if total <= 0:
+            try:
+                in_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return JSONResponse({"ok": False, "error": "empty_body"}, status_code=400)
+    except Exception:
+        try:
+            in_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return JSONResponse({"ok": False, "error": "write_failed"}, status_code=500)
+
+    ffmpeg_bin = (os.environ.get("FFMPEG_BIN") or "ffmpeg").strip() or "ffmpeg"
+    def _cmd_for(f: str, out: Path) -> list:
+        base_cmd = [
+            ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-fflags",
+            "+discardcorrupt",
+            "-i",
+            str(in_path),
+            "-vn",
+            "-sn",
+            "-dn",
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+        ]
+        if f == "mp3":
+            return base_cmd + ["-c:a", "libmp3lame", "-q:a", "2", str(out)]
+        if f == "wav":
+            return base_cmd + ["-acodec", "pcm_s16le", "-f", "wav", str(out)]
+        return base_cmd + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out)]
+
+    def _call(cmd: list) -> subprocess.CompletedProcess:
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    proc = await asyncio.to_thread(_call, _cmd_for(fmt, out_path))
+    if proc.returncode != 0 or (not out_path.exists()):
+        chain = []
+        if fmt == "mp3":
+            chain = ["m4a", "wav"]
+        elif fmt == "m4a":
+            chain = ["wav"]
+
+        for fb in chain:
+            try:
+                out_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            out_ext = "wav" if fb == "wav" else ("mp3" if fb == "mp3" else "m4a")
+            out_path = JOBS / f"decode_{job_id}.{out_ext}"
+            proc = await asyncio.to_thread(_call, _cmd_for(fb, out_path))
+            if proc.returncode == 0 and out_path.exists():
+                fmt = fb
+                break
+
+    if proc.returncode != 0 or (not out_path.exists()):
+        try:
+            in_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            out_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        msg = (proc.stderr or proc.stdout or "decode_failed").strip()
+        return JSONResponse({"ok": False, "error": "decode_failed", "detail": msg[:4000]}, status_code=500)
+
+    def _cleanup() -> None:
+        try:
+            in_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            out_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    background_tasks.add_task(_cleanup)
+
+    media = "audio/wav" if fmt == "wav" else ("audio/mpeg" if fmt == "mp3" else "audio/mp4")
+    filename = f"decoded.{out_ext}"
+    resp = FileResponse(path=str(out_path), media_type=media, filename=filename)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.post("/api/demucs/upload")
