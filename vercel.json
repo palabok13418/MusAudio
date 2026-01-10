@@ -1,5 +1,8 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/favicon.ico", "destination": "/favicon.png" },
     { "source": "/amp", "destination": "/api/amp" },
     { "source": "/health", "destination": "/api/health" },
     { "source": "/engine", "destination": "/api/engine" },
@@ -8,7 +11,7 @@
     { "source": "/pwa-icon-512.png", "destination": "/api/pwa-icon?size=512" },
     { "source": "/demucs/files/:path*", "destination": "/api/demucs/files?path=:path*" },
     { "source": "/demucs/:path*", "destination": "/api/demucs/:path*" },
-    { "source": "/pro", "destination": "/musaumz.html" },
-    { "source": "/musaumz", "destination": "/musaumz.html" }
+    { "source": "/pro", "destination": "/ts.html" },
+    { "source": "/musaumz", "destination": "/ts.html" }
   ]
 }

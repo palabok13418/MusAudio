@@ -5,7 +5,7 @@ const CORE_ASSETS = [
   '/index.html',
   '/pro',
   '/musaumz',
-  '/musaumz.html',
+  '/ts.html',
   '/styles.css',
   '/app.js',
   '/musaumz.js',

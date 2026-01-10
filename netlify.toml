@@ -1,5 +1,6 @@
 [build]
-  publish = "."
+  command = "npm run build"
+  publish = "dist"
   functions = "netlify/functions"
 
 [[redirects]]
@@ -20,4 +21,14 @@
 [[redirects]]
   from = "/decode"
   to = "/.netlify/functions/decode"
+  status = 200
+
+[[redirects]]
+  from = "/pro"
+  to = "/ts.html"
+  status = 200
+
+[[redirects]]
+  from = "/musaumz"
+  to = "/ts.html"
   status = 200
