@@ -10,28 +10,22 @@ function corsHeaders(origin) {
   };
 }
 
-function backendDecodeUrl() {
+function backendAnalyzeUrl() {
   try {
-    const raw = String(process.env.DECODE_BACKEND_URL || process.env.DEMUCS_BACKEND_URL || '').trim();
+    const raw = String(process.env.ANALYZE_BACKEND_URL || process.env.PROBE_BACKEND_URL || process.env.DECODE_BACKEND_URL || process.env.DEMUCS_BACKEND_URL || '').trim();
     if (!raw) return '';
-    return raw.replace(/\/+$/, '') + '/decode';
+    return raw.replace(/\/+$/, '') + '/analyze';
   } catch {
     return '';
   }
 }
 
-function pickDecodeQuery(event) {
+function pickAnalyzeQuery(event) {
   try {
-    const allow = new Set(['format', 'sr', 'ar', 'ac', 'channels']);
     const qs = event && event.queryStringParameters ? event.queryStringParameters : {};
-    const out = [];
-    for (const k of Object.keys(qs || {})) {
-      if (!allow.has(k)) continue;
-      const v = qs[k];
-      if (v == null) continue;
-      out.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
-    }
-    return out.length ? `?${out.join('&')}` : '';
+    const sec = qs && qs.seconds != null ? String(qs.seconds) : '';
+    if (!sec) return '';
+    return `?seconds=${encodeURIComponent(sec)}`;
   } catch {
     return '';
   }
@@ -52,12 +46,12 @@ exports.handler = async (event) => {
     };
   }
 
-  const url = backendDecodeUrl();
+  const url = backendAnalyzeUrl();
   if (!url) {
     return {
       statusCode: 500,
       headers: { ...corsHeaders(origin), 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ ok: false, error: 'missing_decode_backend', hint: 'Set DECODE_BACKEND_URL or DEMUCS_BACKEND_URL' }),
+      body: JSON.stringify({ ok: false, error: 'missing_analyze_backend', hint: 'Set ANALYZE_BACKEND_URL, PROBE_BACKEND_URL, DECODE_BACKEND_URL or DEMUCS_BACKEND_URL' }),
     };
   }
 
@@ -91,11 +85,11 @@ exports.handler = async (event) => {
 
   const upHeaders = {
     'Content-Type': 'application/octet-stream',
-    'Accept': 'audio/wav',
+    'Accept': 'application/json',
   };
   if (fn) upHeaders['X-Filename'] = fn;
 
-  const q = pickDecodeQuery(event);
+  const q = pickAnalyzeQuery(event);
   const res = await fetch(url + q, { method: 'POST', headers: upHeaders, body: bodyBuf }).catch(() => null);
   if (!res) {
     return {
@@ -105,31 +99,12 @@ exports.handler = async (event) => {
     };
   }
 
-  const ct = res.headers.get('content-type') || 'application/octet-stream';
-  const isAudio = ct.toLowerCase().includes('audio/') || ct.toLowerCase().includes('wav') || ct.toLowerCase().includes('octet-stream');
-
-  if (!isAudio) {
-    const text = await res.text().catch(() => '');
-    return {
-      statusCode: res.status,
-      headers: { ...corsHeaders(origin), 'Content-Type': ct },
-      body: text,
-    };
-  }
-
-  const ab = await res.arrayBuffer().catch(() => null);
-  if (!ab) {
-    return {
-      statusCode: 502,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ ok: false, error: 'upstream_read_failed' }),
-    };
-  }
+  const ct = res.headers.get('content-type') || 'application/json';
+  const text = await res.text().catch(() => '');
 
   return {
     statusCode: res.status,
     headers: { ...corsHeaders(origin), 'Content-Type': ct },
-    body: Buffer.from(ab).toString('base64'),
-    isBase64Encoded: true,
+    body: text,
   };
 };

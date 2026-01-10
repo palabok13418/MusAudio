@@ -10,7 +10,7 @@
   <meta property="og:title" content="MusAudio">
   <meta property="og:description" content="An Actual Audio Player Made For HTML Users">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="https://github.com/palabok13418/MusPlayr-Database/blob/main/Untitled%20design.png?raw=true">
+  <meta property="og:image" content="./favicon.png">
   <title>MusAudio</title>
   <link rel="icon" type="image/gif" href="./favicon.gif">
   <link rel="icon" type="image/png" href="./favicon.png">
@@ -18,30 +18,52 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mp3tag.js@3.14.0/dist/mp3tag.min.js"></script>
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
+  <link id="materialSymbolsCss" rel="stylesheet" href="./vendor/material-symbols/material-symbols-outlined.css">
+  <script>
+    (function(){
+      try {
+        const el = document.getElementById('materialSymbolsCss');
+        if (!el) return;
+        el.addEventListener('error', () => {
+          try { el.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined'; } catch {}
+        }, { once: true });
+      } catch {}
+    })();
+  </script>
+  <script src="./vendor/jsmediatags/jsmediatags.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js'"></script>
+  <script src="./vendor/mp3tag/mp3tag.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mp3tag.js@3.14.0/dist/mp3tag.min.js'"></script>
+  <script src="./vendor/jquery/jquery-3.7.1.min.js" onerror="this.onerror=null;this.integrity='sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=';this.crossOrigin='anonymous';this.src='https://code.jquery.com/jquery-3.7.1.min.js'"></script>
+  <script src="./vendor/howler/howler.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js'"></script>
   <!-- Aurora.js core (for ALAC/M4A decoding) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aurora.js/0.4.2/aurora.min.js"></script>
+  <script src="./vendor/aurora/aurora.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/aurora.js/0.4.2/aurora.min.js'"></script>
   <!-- Audiocogs decoders for Aurora.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aurora.js-mp3/0.1.0/mp3.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aurora.js-aac/0.1.0/aac.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aurora.js-flac/0.2.1/flac.min.js"></script>
+  <script src="./vendor/aurora/mp3.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/aurora.js-mp3/0.1.0/mp3.min.js'"></script>
+  <script src="./vendor/aurora/aac.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/aurora.js-aac/0.1.0/aac.min.js'"></script>
+  <script src="./vendor/aurora/flac.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/aurora.js-flac/0.2.1/flac.min.js'"></script>
   <!-- Apple Lossless decoder plugin for Aurora (ALAC) - browser-ready build -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aurora.js-alac/0.1.0/alac.min.js"></script>
+  <script src="./vendor/aurora/alac.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/aurora.js-alac/0.1.0/alac.min.js'"></script>
   <!-- MP4Box.js for MP4/M4A container parsing (UMD, non-module build) -->
-  <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
+  <script src="./vendor/mp4box/mp4box.all.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js'"></script>
   <!-- FFmpeg.wasm UMD bundle for advanced transcoding/decoding -->
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.min.js"></script>
+  <script src="./vendor/ffmpeg/ffmpeg.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.min.js'"></script>
   <!-- MediaInfo.js for probing media file metadata -->
-  <script src="https://unpkg.com/mediainfo.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/@applemusic-like-lyrics/core@0.2.0/dist/amll-core.css">
+  <script src="./vendor/mediainfo/mediainfo.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/mediainfo.js'"></script>
+  <link id="amllCoreCss" rel="stylesheet" href="./vendor/amll/amll-core.css">
+  <script>
+    (function(){
+      try {
+        const el = document.getElementById('amllCoreCss');
+        if (!el) return;
+        el.addEventListener('error', () => {
+          try { el.href = 'https://unpkg.com/@applemusic-like-lyrics/core@0.2.0/dist/amll-core.css'; } catch {}
+        }, { once: true });
+      } catch {}
+    })();
+  </script>
   <script>
     (async () => {
       try {
-        const amll = await import('https://esm.sh/@applemusic-like-lyrics/core@0.2.0?bundle');
+        const amll = await import('./vendor/amll/amll-core.esm.js').catch(()=> import('https://esm.sh/@applemusic-like-lyrics/core@0.2.0?bundle'));
         window.__AMLL = amll;
       } catch (e) {
         window.__AMLL = null;
@@ -4490,24 +4512,27 @@
     async function ensureEruda(){
       try {
         if (window.eruda && typeof window.eruda.init === 'function') return true;
-        const ok = await __loadScriptOnce('https://cdn.jsdelivr.net/npm/eruda');
-        return !!(ok && window.eruda && typeof window.eruda.init === 'function');
+        const base = './vendor/eruda';
+        const okLocal = await __loadScriptOnce(base + '/eruda.min.js');
+        return !!(okLocal && window.eruda && typeof window.eruda.init === 'function');
       } catch { return false; }
     }
 
     async function ensureErudaPlugins(){
+      const base = './vendor/eruda';
       const items = [
-        { url: 'https://cdn.jsdelivr.net/npm/eruda-dom', name: 'erudaDom' },
-        { url: 'https://cdn.jsdelivr.net/npm/eruda-fps', name: 'erudaFps' },
-        { url: 'https://cdn.jsdelivr.net/npm/eruda-features', name: 'erudaFeatures' },
-        { url: 'https://cdn.jsdelivr.net/npm/eruda-timing', name: 'erudaTiming' },
-        { url: 'https://cdn.jsdelivr.net/npm/eruda-code', name: 'erudaCode' },
-        { url: 'https://cdn.jsdelivr.net/npm/eruda-benchmark', name: 'erudaBenchmark' },
-        { url: 'https://cdn.jsdelivr.net/npm/eruda-memory', name: 'erudaMemory' },
+        { local: base + '/eruda-dom.min.js', name: 'erudaDom' },
+        { local: base + '/eruda-fps.min.js', name: 'erudaFps' },
+        { local: base + '/eruda-features.min.js', name: 'erudaFeatures' },
+        { local: base + '/eruda-timing.min.js', name: 'erudaTiming' },
+        { local: base + '/eruda-code.min.js', name: 'erudaCode' },
+        { local: base + '/eruda-benchmark.min.js', name: 'erudaBenchmark' },
+        { local: base + '/eruda-memory.min.js', name: 'erudaMemory' },
       ];
       for (const it of items) {
         try {
-          await __loadScriptOnce(it.url);
+          const okLocal = await __loadScriptOnce(it.local);
+          if (!okLocal) continue;
           const plug = window[it.name];
           if (plug && window.eruda && typeof window.eruda.add === 'function') {
             try { window.eruda.add(plug); } catch {}
@@ -4854,7 +4879,7 @@ ${close}
   </footer>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js">${close}
+<script src="./vendor/ffmpeg/ffmpeg.0.11.6.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js'">${close}
 <script>
   (function(){
     const list = document.getElementById('list');
@@ -4995,7 +5020,7 @@ ${close}
 
     btnHelp.addEventListener('click', ()=>{
       try {
-        alert('Converter runs entirely in your browser using ffmpeg.wasm.\n\nNotes:\n- Big files and high concurrency can use a lot of RAM.\n- If your browser blocks multiple downloads, download files one by one.\n- This feature requires an internet connection to load ffmpeg.wasm from a CDN.');
+        alert('Converter runs entirely in your browser using ffmpeg.wasm.\n\nNotes:\n- Big files and high concurrency can use a lot of RAM.\n- If your browser blocks multiple downloads, download files one by one.\n- If the local ffmpeg.wasm files are not available, this feature may require an internet connection to load them.');
       } catch {}
     });
 
@@ -5010,11 +5035,22 @@ ${close}
 
     async function createWorker(){
       const lib = await ensureFfmpeg();
-      const ffmpeg = lib.createFFmpeg({
-        log: false,
-        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-      });
-      await ffmpeg.load();
+      const coreLocalA = './vendor/ffmpeg/ffmpeg-core.0.11.0.js';
+      const coreLocalB = './vendor/ffmpeg/ffmpeg-core.js';
+      const coreCdn = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js';
+
+      let ffmpeg = lib.createFFmpeg({ log: false, corePath: coreLocalA });
+      try {
+        await ffmpeg.load();
+      } catch {
+        try {
+          ffmpeg = lib.createFFmpeg({ log: false, corePath: coreLocalB });
+          await ffmpeg.load();
+        } catch {
+          ffmpeg = lib.createFFmpeg({ log: false, corePath: coreCdn });
+          await ffmpeg.load();
+        }
+      }
       return { ffmpeg, busy:false };
     }
 
@@ -7290,16 +7326,22 @@ ${close}
           }
         } catch {}
 
-        const okTf = await loadExtScript(
+        const okTf = (await loadExtScript(
+          './vendor/tfjs/tf.min.js',
+          ()=> !!(window.tf && window.tf.tensor)
+        )) || (await loadExtScript(
           'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js',
           ()=> !!(window.tf && window.tf.tensor)
-        );
+        ));
         if (!okTf) return null;
 
-        const okBf = await loadExtScript(
+        const okBf = (await loadExtScript(
+          './vendor/blazeface/blazeface.min.js',
+          ()=> !!(window.blazeface && typeof window.blazeface.load === 'function')
+        )) || (await loadExtScript(
           'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js',
           ()=> !!(window.blazeface && typeof window.blazeface.load === 'function')
-        );
+        ));
         if (!okBf) return null;
 
         if (!cameraBlackoutRuntime.blazefaceModel) {
@@ -13549,8 +13591,30 @@ void main(){
       isCrossfading = true;
       if (usingA) { gainA.gain.cancelScheduledValues(now); gainB.gain.cancelScheduledValues(now); }
       else { gainB.gain.cancelScheduledValues(now); gainA.gain.cancelScheduledValues(now); }
-      if (usingA) { gainB.gain.setValueAtTime(0, startAt); gainB.gain.linearRampToValueAtTime(1, startAt+fade); gainA.gain.setValueAtTime(1, startAt); gainA.gain.linearRampToValueAtTime(0, startAt+fade); }
-      else { gainA.gain.setValueAtTime(0, startAt); gainA.gain.linearRampToValueAtTime(1, startAt+fade); gainB.gain.setValueAtTime(1, startAt); gainB.gain.linearRampToValueAtTime(0, startAt+fade); }
+      try {
+        const N = 128;
+        const outCurve = new Float32Array(N);
+        const inCurve = new Float32Array(N);
+        for (let i=0;i<N;i++){
+          const t = i/(N-1);
+          inCurve[i] = Math.sin(t*Math.PI*0.5);
+          outCurve[i] = Math.cos(t*Math.PI*0.5);
+        }
+        if (usingA) {
+          gainB.gain.setValueAtTime(0, startAt);
+          gainB.gain.setValueCurveAtTime(inCurve, startAt, fade);
+          gainA.gain.setValueAtTime(1, startAt);
+          gainA.gain.setValueCurveAtTime(outCurve, startAt, fade);
+        } else {
+          gainA.gain.setValueAtTime(0, startAt);
+          gainA.gain.setValueCurveAtTime(inCurve, startAt, fade);
+          gainB.gain.setValueAtTime(1, startAt);
+          gainB.gain.setValueCurveAtTime(outCurve, startAt, fade);
+        }
+      } catch {
+        if (usingA) { gainB.gain.setValueAtTime(0, startAt); gainB.gain.linearRampToValueAtTime(1, startAt+fade); gainA.gain.setValueAtTime(1, startAt); gainA.gain.linearRampToValueAtTime(0, startAt+fade); }
+        else { gainA.gain.setValueAtTime(0, startAt); gainA.gain.linearRampToValueAtTime(1, startAt+fade); gainB.gain.setValueAtTime(1, startAt); gainB.gain.linearRampToValueAtTime(0, startAt+fade); }
+      }
       try {
         stemInit();
         const outW = stemWhichForEl(a);
@@ -15493,6 +15557,38 @@ void main(){
       } catch { return null; }
     }
 
+    const __probeCache = new Map();
+    async function probeCodecWithBackend(file, bufOpt){
+      try {
+        if (!file) return null;
+        if (Number(file.size||0) > 250 * 1024 * 1024) return null;
+        const sig = fileSignature(file);
+        if (sig && __probeCache.has(sig)) return __probeCache.get(sig);
+        const buf = bufOpt || await file.arrayBuffer();
+        if (!buf || !buf.byteLength) return null;
+        const ac = new AbortController();
+        const t = setTimeout(()=>{ try { ac.abort(); } catch {} }, 25000);
+        const headers = { 'Content-Type':'application/octet-stream', 'Accept':'application/json' };
+        try {
+          let fn = String(file.name || 'audio.bin');
+          fn = fn.replace(/[\r\n]+/g, ' ').trim();
+          if (!fn) fn = 'audio.bin';
+          if (fn.length > 180) fn = fn.slice(0, 180);
+          headers['X-Filename'] = fn;
+        } catch {}
+        const res = await fetch('/probe', { method:'POST', headers, body: buf, signal: ac.signal }).catch(()=>null);
+        try { clearTimeout(t); } catch {}
+        if (!res || !res.ok) return null;
+        const j = await res.json().catch(()=>null);
+        if (!j || j.ok !== true) return null;
+        const out = j.probe || null;
+        if (sig) __probeCache.set(sig, out);
+        return out;
+      } catch {
+        return null;
+      }
+    }
+
     async function probeLrcWithMediaInfo(track, file, debugName, ext){
       try {
         if (!file || !file.size || typeof file.slice !== 'function') return;
@@ -15800,12 +15896,23 @@ void main(){
             } catch {}
             const codecStr = (codecInfo && codecInfo.codec) || '';
             const codec = codecStr.toLowerCase();
-            const isAlac = codec.includes('alac');
-            const isAacLike = codec.includes('mp4a') || codec.includes('aac');
-            const isAc4 = codec.includes('ac-4') || codec.includes('ac4');
-            const isDolby = isAc4 || codec.includes('ec-3') || codec.includes('ec3') || codec.includes('ac-3') || codec.includes('eac3') || codec.includes('dolby') || codec.includes('atmos');
 
-            const mp4CodecPlayable = isDolby ? (canPlayMp4AudioCodec(codec) || canPlayMp4AudioCodec(codecStr)) : false;
+            let codecName = '';
+            if (!codec && m4aBuf) {
+              try {
+                const p = await probeCodecWithBackend(file, m4aBuf);
+                const cn = p && p.audio ? p.audio.codec_name : '';
+                codecName = cn ? String(cn) : '';
+              } catch { codecName = ''; }
+            }
+            const cn2 = String(codecName || '').toLowerCase();
+
+            const isAlac = codec.includes('alac') || cn2.includes('alac');
+            const isAacLike = codec.includes('mp4a') || codec.includes('aac') || cn2.includes('aac');
+            const isAc4 = codec.includes('ac-4') || codec.includes('ac4') || cn2 === 'ac4' || cn2.includes('ac4');
+            const isDolby = isAc4 || codec.includes('ec-3') || codec.includes('ec3') || codec.includes('ac-3') || codec.includes('eac3') || codec.includes('dolby') || codec.includes('atmos') || cn2 === 'ac3' || cn2 === 'eac3' || cn2 === 'ec3' || cn2.includes('ac3') || cn2.includes('eac3') || cn2.includes('ec3');
+
+            const mp4CodecPlayable = (isDolby && codec) ? (canPlayMp4AudioCodec(codec) || canPlayMp4AudioCodec(codecStr)) : false;
 
             try {
               if (isDolby) console.log('[DolbyProbe]', debugName, 'codec=', codecStr, 'playable=', mp4CodecPlayable);

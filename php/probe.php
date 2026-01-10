@@ -16,45 +16,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   exit();
 }
 
-$base = trim(strval(getenv('DECODE_BACKEND_URL') ?: (getenv('DEMUCS_BACKEND_URL') ?: '')));
+$base = trim(strval(getenv('PROBE_BACKEND_URL') ?: (getenv('DECODE_BACKEND_URL') ?: (getenv('DEMUCS_BACKEND_URL') ?: ''))));
 if ($base === '') {
   header('Content-Type: application/json; charset=utf-8');
   http_response_code(500);
-  echo json_encode([ 'ok' => false, 'error' => 'missing_decode_backend', 'hint' => 'Set DECODE_BACKEND_URL or DEMUCS_BACKEND_URL' ]);
+  echo json_encode([ 'ok' => false, 'error' => 'missing_probe_backend', 'hint' => 'Set PROBE_BACKEND_URL, DECODE_BACKEND_URL or DEMUCS_BACKEND_URL' ]);
   exit();
 }
 $base = rtrim($base, "/");
-$url = $base . '/decode';
-
-$q = [];
-try {
-  $fmt = isset($_GET['format']) ? strtolower(trim(strval($_GET['format']))) : '';
-  if ($fmt === 'wav' || $fmt === 'mp3' || $fmt === 'm4a') {
-    $q['format'] = $fmt;
-  }
-} catch (Throwable $t) {}
-try {
-  $sr = isset($_GET['sr']) ? intval($_GET['sr']) : 0;
-  if ($sr <= 0 && isset($_GET['ar'])) {
-    $sr = intval($_GET['ar']);
-  }
-  if ($sr >= 8000 && $sr <= 192000) {
-    $q['sr'] = strval($sr);
-  }
-} catch (Throwable $t) {}
-try {
-  $ac = isset($_GET['ac']) ? intval($_GET['ac']) : 0;
-  if ($ac <= 0 && isset($_GET['channels'])) {
-    $ac = intval($_GET['channels']);
-  }
-  if ($ac >= 1 && $ac <= 2) {
-    $q['ac'] = strval($ac);
-  }
-} catch (Throwable $t) {}
-
-if (!empty($q)) {
-  $url = $url . '?' . http_build_query($q);
-}
+$url = $base . '/probe';
 
 $len = 0;
 try {
@@ -69,7 +39,7 @@ if ($len > 250 * 1024 * 1024) {
   exit();
 }
 
-$tmp = tempnam(sys_get_temp_dir(), 'mus_decode_');
+$tmp = tempnam(sys_get_temp_dir(), 'mus_probe_');
 if ($tmp === false || $tmp === '') {
   header('Content-Type: application/json; charset=utf-8');
   http_response_code(500);
@@ -128,7 +98,7 @@ if ($fp === false) {
 
 $headers = [];
 $headers[] = 'Content-Type: application/octet-stream';
-$headers[] = 'Accept: audio/wav';
+$headers[] = 'Accept: application/json';
 $fn = $_SERVER['HTTP_X_FILENAME'] ?? '';
 if ($fn !== '') {
   $headers[] = 'X-Filename: ' . $fn;
@@ -162,7 +132,7 @@ if ($resp === false) {
 $rawHeaders = substr($resp, 0, $headerSize);
 $body = substr($resp, $headerSize);
 
-$contentType = 'application/octet-stream';
+$contentType = 'application/json';
 foreach (explode("\r\n", $rawHeaders) as $line) {
   if (stripos($line, 'content-type:') === 0) {
     $contentType = trim(substr($line, strlen('content-type:')));

@@ -35,39 +35,28 @@ export async function onRequest(context: any): Promise<Response> {
     });
   }
 
-  const base = String(env.DECODE_BACKEND_URL || env.DEMUCS_BACKEND_URL || '').trim();
+  const base = String(env.ANALYZE_BACKEND_URL || env.PROBE_BACKEND_URL || env.DECODE_BACKEND_URL || env.DEMUCS_BACKEND_URL || '').trim();
   if (!base) {
     return new Response(
-      JSON.stringify({ ok: false, error: 'missing_decode_backend', hint: 'Set DECODE_BACKEND_URL or DEMUCS_BACKEND_URL' }),
+      JSON.stringify({ ok: false, error: 'missing_analyze_backend', hint: 'Set ANALYZE_BACKEND_URL, PROBE_BACKEND_URL, DECODE_BACKEND_URL or DEMUCS_BACKEND_URL' }),
       { status: 500, headers: { ...headers, 'Content-Type': 'application/json; charset=utf-8' } }
     );
   }
 
-  const url = base.replace(/\/+$/, '') + '/decode';
+  const u = new URL(req.url);
+  const seconds = u.searchParams.get('seconds') || '';
+  const qs = seconds ? `?seconds=${encodeURIComponent(seconds)}` : '';
 
-  let qs = '';
-  try {
-    const u = new URL(req.url);
-    const allow = new Set(['format', 'sr', 'ar', 'ac', 'channels']);
-    const out = new URLSearchParams();
-    for (const [k, v] of u.searchParams.entries()) {
-      if (!allow.has(k)) continue;
-      out.set(k, v);
-    }
-    const s = out.toString();
-    qs = s ? `?${s}` : '';
-  } catch {
-    qs = '';
-  }
+  const url = base.replace(/\/+$/, '') + '/analyze' + qs;
 
   const fn = req.headers.get('x-filename') || '';
   const upHeaders: Record<string, string> = {
     'Content-Type': 'application/octet-stream',
-    'Accept': 'audio/wav',
+    'Accept': 'application/json',
   };
   if (fn) upHeaders['X-Filename'] = fn;
 
-  const upstream = await fetch(url + qs, { method: 'POST', headers: upHeaders, body: raw }).catch(() => null);
+  const upstream = await fetch(url, { method: 'POST', headers: upHeaders, body: raw }).catch(() => null);
   if (!upstream) {
     return new Response(JSON.stringify({ ok: false, error: 'upstream_fetch_failed' }), {
       status: 502,
@@ -75,21 +64,7 @@ export async function onRequest(context: any): Promise<Response> {
     });
   }
 
-  const ct = upstream.headers.get('content-type') || 'application/octet-stream';
-  const isText = ct.toLowerCase().includes('application/json') || ct.toLowerCase().startsWith('text/');
-
-  if (isText) {
-    const text = await upstream.text().catch(() => '');
-    return new Response(text, { status: upstream.status, headers: { ...headers, 'Content-Type': ct } });
-  }
-
-  const ab = await upstream.arrayBuffer().catch(() => null);
-  if (!ab) {
-    return new Response(JSON.stringify({ ok: false, error: 'upstream_read_failed' }), {
-      status: 502,
-      headers: { ...headers, 'Content-Type': 'application/json; charset=utf-8' },
-    });
-  }
-
-  return new Response(ab, { status: upstream.status, headers: { ...headers, 'Content-Type': ct } });
+  const ct = upstream.headers.get('content-type') || 'application/json';
+  const text = await upstream.text().catch(() => '');
+  return new Response(text, { status: upstream.status, headers: { ...headers, 'Content-Type': ct } });
 }

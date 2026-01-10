@@ -3,6 +3,7 @@ import re
 import sys
 import uuid
 import shutil
+import json
 import asyncio
 import subprocess
 from dataclasses import dataclass
@@ -49,6 +50,54 @@ def _prediction_payload(job: "Job") -> Dict[str, Any]:
     return out
 
 
+def _parse_volumedetect(stderr_text: str) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    try:
+        s = stderr_text or ""
+        m = re.search(r"mean_volume:\s*(-?\d+(?:\.\d+)?)\s*dB", s)
+        if m:
+            out["mean_db"] = float(m.group(1))
+    except Exception:
+        pass
+    try:
+        s = stderr_text or ""
+        m = re.search(r"max_volume:\s*(-?\d+(?:\.\d+)?)\s*dB", s)
+        if m:
+            out["max_db"] = float(m.group(1))
+    except Exception:
+        pass
+    return out
+
+
+def _run_volumedetect(path: Path, seconds: int = 0) -> Dict[str, Any]:
+    ffmpeg_bin = (os.environ.get("FFMPEG_BIN") or "ffmpeg").strip() or "ffmpeg"
+    cmd = [
+        ffmpeg_bin,
+        "-hide_banner",
+        "-nostats",
+        "-v",
+        "info",
+    ]
+    if seconds and seconds > 0:
+        cmd += ["-t", str(int(seconds))]
+    cmd += [
+        "-i",
+        str(path),
+        "-vn",
+        "-sn",
+        "-dn",
+        "-af",
+        "volumedetect",
+        "-f",
+        "null",
+        "-",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    if proc.returncode != 0 and not (proc.stderr or "").strip():
+        raise RuntimeError("volumedetect_failed")
+    return _parse_volumedetect(proc.stderr or "")
+
+
 @dataclass
 class Job:
     id: str
@@ -77,6 +126,220 @@ async def health() -> Dict[str, Any]:
     return {"ok": True, "service": "demucs", "model": "htdemucs_6s"}
 
 
+@app.get("/engine")
+async def engine() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "status": "ok",
+        "runtime": "python",
+        "version": "engine_v1",
+        "engine": {
+            "automix": {
+                "preloadLeadSec": 14,
+                "preloadMinSec": 8,
+                "triggerLeadSec": 0.35,
+                "hardSwitchIfNotReadyMs": 1200,
+            },
+            "spatialize": {
+                "updateHz": 30,
+                "cycleHz": 0.08,
+                "depth": 0.65,
+                "crossfadeDepth": 0.9,
+                "smoothingSec": 0.08,
+            },
+        },
+    }
+
+
+def _ffprobe_bin() -> str:
+    try:
+        b = (os.environ.get("FFPROBE_BIN") or "ffprobe").strip()
+        return b or "ffprobe"
+    except Exception:
+        return "ffprobe"
+
+
+def _run_ffprobe(path: Path) -> Dict[str, Any]:
+    cmd = [
+        _ffprobe_bin(),
+        "-hide_banner",
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        str(path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or "ffprobe_failed").strip()
+        raise RuntimeError(msg[:4000])
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        raise RuntimeError("ffprobe_empty")
+    try:
+        j = json.loads(raw)
+    except Exception:
+        raise RuntimeError("ffprobe_bad_json")
+
+    out: Dict[str, Any] = {"raw": j}
+    try:
+        fmt = j.get("format") or {}
+        out["format"] = {
+            "format_name": fmt.get("format_name"),
+            "duration": fmt.get("duration"),
+            "bit_rate": fmt.get("bit_rate"),
+            "size": fmt.get("size"),
+        }
+    except Exception:
+        pass
+    try:
+        streams = j.get("streams") or []
+        if isinstance(streams, list):
+            audio = None
+            for s in streams:
+                if isinstance(s, dict) and s.get("codec_type") == "audio":
+                    audio = s
+                    break
+            if isinstance(audio, dict):
+                out["audio"] = {
+                    "codec_name": audio.get("codec_name"),
+                    "sample_rate": audio.get("sample_rate"),
+                    "channels": audio.get("channels"),
+                    "channel_layout": audio.get("channel_layout"),
+                    "bit_rate": audio.get("bit_rate"),
+                }
+    except Exception:
+        pass
+    return out
+
+
+@app.post("/probe")
+async def probe_audio(req: Request, background_tasks: BackgroundTasks) -> JSONResponse:
+    fn = req.headers.get("x-filename", "")
+    try:
+        fn = fn.strip()
+    except Exception:
+        fn = ""
+
+    ext = _safe_ext(fn)
+    job_id = uuid.uuid4().hex
+    in_path = UPLOADS / f"probe_{job_id}.{ext}"
+
+    try:
+        total = 0
+        with in_path.open("wb") as f:
+            async for chunk in req.stream():
+                if not chunk:
+                    continue
+                f.write(chunk)
+                total += len(chunk)
+                if total > 250 * 1024 * 1024:
+                    try:
+                        in_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    return JSONResponse({"ok": False, "error": "too_large"}, status_code=413)
+        if total <= 0:
+            try:
+                in_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return JSONResponse({"ok": False, "error": "empty_body"}, status_code=400)
+    except Exception:
+        try:
+            in_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return JSONResponse({"ok": False, "error": "write_failed"}, status_code=500)
+
+    def _cleanup() -> None:
+        try:
+            in_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    background_tasks.add_task(_cleanup)
+
+    try:
+        probe = await asyncio.to_thread(_run_ffprobe, in_path)
+        return JSONResponse({"ok": True, "probe": probe})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": "probe_failed", "detail": str(e)[:4000]}, status_code=500)
+
+
+@app.post("/analyze")
+async def analyze_audio(req: Request, background_tasks: BackgroundTasks) -> JSONResponse:
+    fn = req.headers.get("x-filename", "")
+    try:
+        fn = fn.strip()
+    except Exception:
+        fn = ""
+
+    ext = _safe_ext(fn)
+    job_id = uuid.uuid4().hex
+    in_path = UPLOADS / f"analyze_{job_id}.{ext}"
+
+    try:
+        total = 0
+        with in_path.open("wb") as f:
+            async for chunk in req.stream():
+                if not chunk:
+                    continue
+                f.write(chunk)
+                total += len(chunk)
+                if total > 250 * 1024 * 1024:
+                    try:
+                        in_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    return JSONResponse({"ok": False, "error": "too_large"}, status_code=413)
+        if total <= 0:
+            try:
+                in_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return JSONResponse({"ok": False, "error": "empty_body"}, status_code=400)
+    except Exception:
+        try:
+            in_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return JSONResponse({"ok": False, "error": "write_failed"}, status_code=500)
+
+    def _cleanup() -> None:
+        try:
+            in_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    background_tasks.add_task(_cleanup)
+
+    seconds = 0
+    try:
+        s_raw = str(req.query_params.get("seconds") or "").strip()
+        if s_raw:
+            s_i = int(s_raw)
+            if 1 <= s_i <= 180:
+                seconds = s_i
+    except Exception:
+        seconds = 0
+
+    try:
+        probe = await asyncio.to_thread(_run_ffprobe, in_path)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": "ffprobe_failed", "detail": str(e)[:4000]}, status_code=500)
+
+    vol: Dict[str, Any] = {}
+    try:
+        vol = await asyncio.to_thread(_run_volumedetect, in_path, seconds)
+    except Exception:
+        vol = {}
+
+    return JSONResponse({"ok": True, "probe": probe, "volume": vol})
+
+
 @app.post("/decode")
 async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileResponse:
     fn = req.headers.get("x-filename", "")
@@ -92,6 +355,26 @@ async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileR
     if fmt not in {"wav", "m4a", "mp3"}:
         fmt = "wav"
 
+    sr = 48000
+    try:
+        sr_raw = str(req.query_params.get("sr") or req.query_params.get("ar") or "").strip()
+        if sr_raw:
+            sr_i = int(sr_raw)
+            if 8000 <= sr_i <= 192000:
+                sr = sr_i
+    except Exception:
+        sr = 48000
+
+    ac = 2
+    try:
+        ac_raw = str(req.query_params.get("ac") or req.query_params.get("channels") or "").strip()
+        if ac_raw:
+            ac_i = int(ac_raw)
+            if ac_i in (1, 2):
+                ac = ac_i
+    except Exception:
+        ac = 2
+
     out_ext = "wav" if fmt == "wav" else ("mp3" if fmt == "mp3" else "m4a")
     out_path = JOBS / f"decode_{job_id}.{out_ext}"
 
@@ -103,6 +386,12 @@ async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileR
                     continue
                 f.write(chunk)
                 total += len(chunk)
+                if total > 250 * 1024 * 1024:
+                    try:
+                        in_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    return JSONResponse({"ok": False, "error": "too_large"}, status_code=413)
         if total <= 0:
             try:
                 in_path.unlink(missing_ok=True)
@@ -132,9 +421,9 @@ async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileR
             "-sn",
             "-dn",
             "-ac",
-            "2",
+            str(ac),
             "-ar",
-            "48000",
+            str(sr),
         ]
         if f == "mp3":
             return base_cmd + ["-c:a", "libmp3lame", "-q:a", "2", str(out)]
@@ -143,7 +432,7 @@ async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileR
         return base_cmd + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out)]
 
     def _call(cmd: list) -> subprocess.CompletedProcess:
-        return subprocess.run(cmd, capture_output=True, text=True)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=180)
 
     proc = await asyncio.to_thread(_call, _cmd_for(fmt, out_path))
     if proc.returncode != 0 or (not out_path.exists()):

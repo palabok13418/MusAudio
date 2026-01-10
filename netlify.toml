@@ -24,6 +24,21 @@
   status = 200
 
 [[redirects]]
+  from = "/probe"
+  to = "/.netlify/functions/probe"
+  status = 200
+
+[[redirects]]
+  from = "/analyze"
+  to = "/.netlify/functions/analyze"
+  status = 200
+
+[[redirects]]
+  from = "/"
+  to = "/ts.html"
+  status = 200
+
+[[redirects]]
   from = "/pro"
   to = "/ts.html"
   status = 200

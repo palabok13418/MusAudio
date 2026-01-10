@@ -128,6 +128,75 @@ function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
 
+async function __probeWithBackend(file, bufOpt) {
+  try {
+    if (!file) return null;
+    if (Number(file.size || 0) > 250 * 1024 * 1024) return null;
+    const key = __fileKey(file);
+    if (key && __probeCache.has(key)) return __probeCache.get(key);
+
+    const buf = bufOpt || (await file.arrayBuffer());
+    if (!buf || !buf.byteLength) return null;
+
+    const ac = new AbortController();
+    const t = setTimeout(() => { try { ac.abort(); } catch {} }, 25000);
+
+    const headers = {
+      'Content-Type': 'application/octet-stream',
+      'Accept': 'application/json',
+    };
+    try {
+      let fn = String(file.name || 'audio.bin');
+      fn = fn.replace(/[\r\n]+/g, ' ').trim();
+      if (!fn) fn = 'audio.bin';
+      if (fn.length > 180) fn = fn.slice(0, 180);
+      headers['X-Filename'] = fn;
+    } catch {}
+
+    const res = await fetch('/probe', { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    try { clearTimeout(t); } catch {}
+    if (!res || !res.ok) return null;
+
+    const j = await res.json().catch(() => null);
+    if (!j || j.ok !== true) return null;
+    const out = j.probe || null;
+    if (key) __probeCache.set(key, out);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function __applyCrossfadeGains(outParam, inParam, outStart, now, dur) {
+  try {
+    const a = outParam;
+    const b = inParam;
+    const d = Math.max(0.05, Number(dur) || 0);
+    const start = isFinite(outStart) ? outStart : 1;
+    try { a.cancelScheduledValues(now); } catch {}
+    try { b.cancelScheduledValues(now); } catch {}
+    try { a.setValueAtTime(start, now); } catch {}
+    try { b.setValueAtTime(0, now); } catch {}
+
+    try {
+      const N = 128;
+      const outCurve = new Float32Array(N);
+      const inCurve = new Float32Array(N);
+      for (let i = 0; i < N; i++) {
+        const t = i / (N - 1);
+        inCurve[i] = Math.sin(t * Math.PI * 0.5);
+        outCurve[i] = Math.cos(t * Math.PI * 0.5) * start;
+      }
+      a.setValueCurveAtTime(outCurve, now, d);
+      b.setValueCurveAtTime(inCurve, now, d);
+      return;
+    } catch {}
+
+    try { b.linearRampToValueAtTime(1, now + d); } catch {}
+    try { a.linearRampToValueAtTime(0, now + d); } catch {}
+  } catch {}
+}
+
 function fmtTime(sec) {
   const s = Math.max(0, Number(sec) || 0);
   const m = Math.floor(s / 60);
@@ -155,6 +224,7 @@ function parseNameToTags(name) {
 }
 
 const __decodeCache = new Map();
+const __probeCache = new Map();
 const __extScriptLoads = Object.create(null);
 let __ffmpegShared = null;
 let __ffmpegSharedLoading = null;
@@ -259,10 +329,26 @@ async function __decodeWithBackendToWavUrl(file, bufOpt) {
       'Accept': 'audio/wav',
     };
     try {
-      headers['X-Filename'] = encodeURIComponent(String(file.name || 'audio.bin'));
+      let fn = String(file.name || 'audio.bin');
+      fn = fn.replace(/[\r\n]+/g, ' ').trim();
+      if (!fn) fn = 'audio.bin';
+      if (fn.length > 180) fn = fn.slice(0, 180);
+      headers['X-Filename'] = fn;
     } catch {}
 
-    const res = await fetch('/decode', { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    let sr = 48000;
+    try {
+      ensureAudio();
+      if (audioCtx && typeof audioCtx.sampleRate === 'number' && isFinite(audioCtx.sampleRate)) {
+        sr = Math.max(8000, Math.min(192000, Math.round(audioCtx.sampleRate)));
+      }
+    } catch {
+      sr = 48000;
+    }
+    const acOut = 2;
+    const url = `/decode?format=wav&sr=${encodeURIComponent(String(sr))}&ac=${encodeURIComponent(String(acOut))}`;
+
+    const res = await fetch(url, { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
     try { clearTimeout(t); } catch {}
 
     __decodeBackendTried = true;
@@ -636,6 +722,17 @@ async function __maybeDecodeTrackToPlayableUrl(track, opts = {}) {
         codec = info && info.codec ? String(info.codec) : '';
       }
 
+      let codecName = '';
+      if ((!codec || !String(codec).trim()) && buf) {
+        const p = await __probeWithBackend(file, buf);
+        try {
+          const cn = p && p.audio ? p.audio.codec_name : '';
+          codecName = cn ? String(cn) : '';
+        } catch {
+          codecName = '';
+        }
+      }
+
       const c = String(codec || '').toLowerCase();
       const isAlac = c.includes('alac');
       const isDolby =
@@ -647,13 +744,19 @@ async function __maybeDecodeTrackToPlayableUrl(track, opts = {}) {
         c.includes('ac-3') ||
         c.includes('ac3');
 
+      const cn2 = String(codecName || '').toLowerCase();
+      const isAlac2 = !isAlac && (cn2 === 'alac' || cn2.includes('alac'));
+      const isDolby2 =
+        !isDolby &&
+        (cn2 === 'ac3' || cn2 === 'eac3' || cn2 === 'ec3' || cn2 === 'ac4' || cn2.includes('ac3') || cn2.includes('eac3') || cn2.includes('ec3') || cn2.includes('ac4'));
+
       const playable = isM4a && codec ? __canPlayMp4AudioCodec(codec) : false;
 
       const shouldDecode =
         opts.force ||
         (isDolbyExt ? true : false) ||
-        (isM4a && isAlac && !playable) ||
-        (isM4a && isDolby && !playable);
+        (isM4a && (isAlac || isAlac2) && !playable) ||
+        (isM4a && (isDolby || isDolby2) && !playable);
 
       if (!shouldDecode) {
         track.__decodeDone = true;
@@ -1158,6 +1261,8 @@ function ensureTrackLoadedOnEl(el, t) {
     if (cur === want) return true;
     safePause(el);
     el.src = want;
+    try { el.preload = 'auto'; } catch {}
+    try { el.load(); } catch {}
     try { el.currentTime = 0; } catch {}
     return true;
   } catch {
@@ -1304,14 +1409,8 @@ async function crossfadeToIndex(i) {
   state.crossfading = true;
   state.crossfadeAt = now;
 
-  try { outG.gain.cancelScheduledValues(now); } catch {}
-  try { inG.gain.cancelScheduledValues(now); } catch {}
-
   const outCur = outG.gain.value;
-  try { outG.gain.setValueAtTime(isFinite(outCur) ? outCur : 1, now); } catch {}
-  try { inG.gain.setValueAtTime(0, now); } catch {}
-  try { inG.gain.linearRampToValueAtTime(1, now + fade); } catch {}
-  try { outG.gain.linearRampToValueAtTime(0, now + fade); } catch {}
+  __applyCrossfadeGains(outG.gain, inG.gain, outCur, now, fade);
 
   setTimeout(() => {
     try {

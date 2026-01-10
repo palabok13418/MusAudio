@@ -1,4 +1,4 @@
-const CACHE_NAME = 'musaudio_pwa_v5';
+const CACHE_NAME = 'musaudio_pwa_v7';
 
 const CORE_ASSETS = [
   '/',
