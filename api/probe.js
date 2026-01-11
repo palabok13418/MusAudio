@@ -26,15 +26,6 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  try {
-    const h = (req && req.headers) ? req.headers : {};
-    const cl = Number(h['content-length'] || h['Content-Length'] || 0);
-    if (isFinite(cl) && cl > 250 * 1024 * 1024) {
-      sendJson(res, origin, methods, 413, { ok: false, error: 'too_large' });
-      return;
-    }
-  } catch {}
-
   const url = buildProbeBackendUrl();
   if (!url) {
     sendJson(res, origin, methods, 500, { ok: false, error: 'missing_probe_backend', hint: 'Set PROBE_BACKEND_URL, DECODE_BACKEND_URL or DEMUCS_BACKEND_URL' });

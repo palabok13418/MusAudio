@@ -1,70 +1,61 @@
 <?php
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Authorization, Music-User-Token, Content-Type, Accept');
-header('Cache-Control: no-store');
+require_once __DIR__ . '/_util.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-  http_response_code(204);
-  exit();
-}
+mus_set_cors('GET,HEAD,OPTIONS', 'Authorization, Music-User-Token, Content-Type, Accept, Range, If-None-Match, If-Modified-Since');
+mus_handle_options();
 
-function allowed_target($u) {
-  $p = parse_url($u);
-  if (!$p) return false;
-  $scheme = isset($p['scheme']) ? strtolower($p['scheme']) : '';
-  if ($scheme !== 'https' && $scheme !== 'http') return false;
-  $host = isset($p['host']) ? strtolower($p['host']) : '';
-  if ($host === 'amp-api.music.apple.com') return true;
-  if (str_ends_with($host, '.music.apple.com')) return true;
-  if (str_ends_with($host, '.mzstatic.com')) return true;
-  return false;
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method !== 'GET' && $method !== 'HEAD') {
+  mus_json(405, [ 'ok' => false, 'error' => 'method_not_allowed' ]);
 }
 
 $target = isset($_GET['url']) ? trim(strval($_GET['url'])) : '';
-if ($target === '' || !allowed_target($target)) {
-  header('Content-Type: application/json; charset=utf-8');
-  http_response_code(400);
-  echo json_encode([ 'ok' => false, 'error' => 'Invalid url' ]);
-  exit();
+if ($target === '' || !mus_allowed_apple_target($target)) {
+  mus_json(400, [ 'ok' => false, 'error' => 'invalid_url' ]);
 }
 
 $headers = [];
-$auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-$mut = $_SERVER['HTTP_MUSIC_USER_TOKEN'] ?? '';
+$auth = mus_sanitize_header_value($_SERVER['HTTP_AUTHORIZATION'] ?? '');
+$mut = mus_sanitize_header_value($_SERVER['HTTP_MUSIC_USER_TOKEN'] ?? '');
 if ($auth !== '') $headers[] = 'Authorization: ' . $auth;
 if ($mut !== '') $headers[] = 'Music-User-Token: ' . $mut;
-$headers[] = 'Accept: ' . ($_SERVER['HTTP_ACCEPT'] ?? '*/*');
+
+$accept = mus_sanitize_header_value($_SERVER['HTTP_ACCEPT'] ?? '*/*');
+if ($accept === '') $accept = '*/*';
+$headers[] = 'Accept: ' . $accept;
+
+$range = mus_sanitize_header_value($_SERVER['HTTP_RANGE'] ?? '');
+if ($range !== '') $headers[] = 'Range: ' . $range;
+$inm = mus_sanitize_header_value($_SERVER['HTTP_IF_NONE_MATCH'] ?? '');
+if ($inm !== '') $headers[] = 'If-None-Match: ' . $inm;
+$ims = mus_sanitize_header_value($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '');
+if ($ims !== '') $headers[] = 'If-Modified-Since: ' . $ims;
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $target);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HEADER, true);
-curl_setopt($ch, CURLOPT_HTTPGET, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-
-$resp = curl_exec($ch);
-if ($resp === false) {
-  header('Content-Type: application/json; charset=utf-8');
-  http_response_code(502);
-  echo json_encode([ 'ok' => false, 'error' => 'Upstream fetch failed' ]);
-  exit();
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+curl_setopt($ch, CURLOPT_TIMEOUT, 35);
+curl_setopt($ch, CURLOPT_HTTPGET, true);
+if ($method === 'HEAD') {
+  curl_setopt($ch, CURLOPT_NOBODY, true);
 }
 
-$headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$rawHeaders = substr($resp, 0, $headerSize);
-$body = substr($resp, $headerSize);
+$pass = [
+  'content-type',
+  'content-length',
+  'content-range',
+  'accept-ranges',
+  'etag',
+  'last-modified',
+  'cache-control',
+  'content-encoding',
+  'content-disposition',
+];
 
-$contentType = 'application/octet-stream';
-foreach (explode("\r\n", $rawHeaders) as $line) {
-  if (stripos($line, 'content-type:') === 0) {
-    $contentType = trim(substr($line, strlen('content-type:')));
-    break;
-  }
+$ok = mus_proxy_stream($ch, $pass);
+try { curl_close($ch); } catch (Throwable $t) {}
+if (!$ok && !headers_sent()) {
+  mus_json(502, [ 'ok' => false, 'error' => 'upstream_fetch_failed' ]);
 }
-
-http_response_code(intval($status));
-header('Content-Type: ' . $contentType);
-echo $body;

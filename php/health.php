@@ -1,13 +1,12 @@
 <?php
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Authorization, Music-User-Token, Content-Type, Accept');
-header('Cache-Control: no-store');
-header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/_util.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-  http_response_code(204);
-  exit();
+mus_set_cors('GET,HEAD,OPTIONS', 'Authorization, Music-User-Token, Content-Type, Accept');
+mus_handle_options();
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method !== 'GET' && $method !== 'HEAD') {
+  mus_json(405, [ 'ok' => false, 'error' => 'method_not_allowed' ]);
 }
 
-echo json_encode([ 'ok' => true, 'status' => 'ok', 'runtime' => 'php' ]);
+mus_json(200, [ 'ok' => true, 'status' => 'ok', 'runtime' => 'php' ]);

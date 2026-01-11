@@ -3,6 +3,9 @@
   publish = "dist"
   functions = "netlify/functions"
 
+ [build.environment]
+   NODE_VERSION = "22"
+
 [[redirects]]
   from = "/amp"
   to = "/.netlify/functions/amp"
@@ -35,15 +38,15 @@
 
 [[redirects]]
   from = "/"
-  to = "/ts.html"
+  to = "/index.html"
   status = 200
 
 [[redirects]]
   from = "/pro"
-  to = "/ts.html"
+  to = "/index.html"
   status = 200
 
 [[redirects]]
   from = "/musaumz"
-  to = "/ts.html"
+  to = "/index.html"
   status = 200

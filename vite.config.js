@@ -9,7 +9,7 @@ module.exports = defineConfig(() => {
       emptyOutDir: true,
       assetsDir: '',
       rollupOptions: {
-        input: [resolve(__dirname, 'index.html'), resolve(__dirname, 'ts.html')],
+        input: [resolve(__dirname, 'index.html')],
         output: {
           entryFileNames: '[name].js',
           chunkFileNames: 'chunks/[name].js',

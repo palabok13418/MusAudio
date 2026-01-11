@@ -1,0 +1,57 @@
+[server]
+bind = ["tcp", "0.0.0.0:8080"]
+transport = "websocket"
+resolve_ipv6 = true
+tcp_nodelay = true
+file_raw_mode = false
+use_real_ip_headers = true
+non_ws_response = "ok"
+max_message_size = 16777216
+log_level = "info"
+runtime = "multi_thread"
+
+[wisp]
+allow_wsproxy = false
+buffer_size = 128
+prefix = "wisp"
+wisp_v2 = true
+extensions = ["udp", "motd"]
+auth_extension = "password"
+password_extension_users = { musaudio = "change_me" }
+password_extension_required = true
+certificate_extension_keys = []
+certificate_extension_required = false
+motd_extension = "musaudio-epoxy"
+
+[stream]
+tcp_nodelay = true
+buffer_size = 65536
+allow_udp = true
+allow_wsproxy_udp = false
+dns_servers = []
+allow_direct_ip = false
+allow_loopback = false
+allow_multicast = false
+allow_global = true
+allow_non_global = false
+
+allow_tcp_hosts = [
+  "^amp-api\\.music\\.apple\\.com$",
+  "^.*\\.music\\.apple\\.com$",
+  "^.*\\.mzstatic\\.com$",
+  "^YOUR_DEMUCS_BACKEND_HOSTNAME$"
+]
+block_tcp_hosts = []
+
+allow_udp_hosts = []
+block_udp_hosts = []
+
+allow_hosts = []
+block_hosts = []
+
+allow_ports = [
+  [443, 443],
+  [80, 80],
+  [8787, 8787]
+]
+block_ports = []

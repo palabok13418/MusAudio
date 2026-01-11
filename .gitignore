@@ -21,6 +21,6 @@ dist
 Thumbs.db
 
 # Lockfiles (keep if you want reproducible builds)
-# package-lock.json
+package-lock.json
 # pnpm-lock.yaml
 # yarn.lock

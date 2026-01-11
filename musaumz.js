@@ -1,43 +1,151 @@
 const $ = (sel) => document.querySelector(sel);
 
-const els = {
-  files: $('#files'),
-  openSettings: $('#openSettings'),
-  settings: $('#settings'),
-  storefront: $('#storefront'),
-  devToken: $('#devToken'),
-  userToken: $('#userToken'),
-  testApi: $('#testApi'),
-  settingsStatus: $('#settingsStatus'),
+let els = null;
 
-  toggleAutomix: $('#toggleAutomix'),
-  toggleSpatial: $('#toggleSpatial'),
-  toggleAutoVol: $('#toggleAutoVol'),
-  toggleAutoEq: $('#toggleAutoEq'),
+function __bindEls() {
+  return {
+    files: $('#files'),
+    openSettings: $('#openSettings'),
+    settings: $('#settings'),
+    storefront: $('#storefront'),
+    devToken: $('#devToken'),
+    userToken: $('#userToken'),
+    testApi: $('#testApi'),
+    settingsStatus: $('#settingsStatus'),
 
-  prev: $('#prev'),
-  playPause: $('#playPause'),
-  next: $('#next'),
-  crossfadeNow: $('#crossfadeNow'),
+    toggleAutomix: $('#toggleAutomix'),
+    toggleSpatial: $('#toggleSpatial'),
+    toggleAutoVol: $('#toggleAutoVol'),
+    toggleAutoEq: $('#toggleAutoEq'),
 
-  time: $('#time'),
-  seek: $('#seek'),
-  vol: $('#vol'),
-  fadeSec: $('#fadeSec'),
-  health: $('#health'),
+    prev: $('#prev'),
+    playPause: $('#playPause'),
+    next: $('#next'),
+    crossfadeNow: $('#crossfadeNow'),
 
-  queue: $('#queue'),
-  queueMeta: $('#queueMeta'),
-  nowMeta: $('#nowMeta'),
-  engineMeta: $('#engineMeta'),
+    time: $('#time'),
+    seek: $('#seek'),
+    vol: $('#vol'),
+    fadeSec: $('#fadeSec'),
+    health: $('#health'),
 
-  fetchLyrics: $('#fetchLyrics'),
-  lyricsMeta: $('#lyricsMeta'),
-  lyrics: $('#lyrics'),
+    queue: $('#queue'),
+    queueMeta: $('#queueMeta'),
+    nowMeta: $('#nowMeta'),
+    engineMeta: $('#engineMeta'),
 
-  audioA: $('#audioA'),
-  audioB: $('#audioB'),
-};
+    fetchLyrics: $('#fetchLyrics'),
+    lyricsMeta: $('#lyricsMeta'),
+    lyrics: $('#lyrics'),
+
+    audioA: $('#audioA'),
+    audioB: $('#audioB'),
+  };
+}
+
+function __ensureShell() {
+  try {
+    if (document.getElementById('files') && document.getElementById('audioA') && document.getElementById('audioB')) return;
+    if (document.getElementById('musaumzRoot')) return;
+
+    const root = document.createElement('div');
+    root.id = 'musaumzRoot';
+    root.innerHTML = `
+      <style>
+        #musaumzRoot{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#e5e7eb;background:#0b0f17;min-height:100vh;padding:20px;box-sizing:border-box}
+        #musaumzRoot a{color:#93c5fd}
+        #musaumzRoot .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+        #musaumzRoot .col{display:flex;flex-direction:column;gap:6px}
+        #musaumzRoot button{background:#111827;border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:8px 12px;cursor:pointer}
+        #musaumzRoot input,#musaumzRoot select,#musaumzRoot textarea{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:8px 10px}
+        #musaumzRoot pre{white-space:pre-wrap;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;max-height:220px;overflow:auto}
+        #musaumzRoot .meta{opacity:.8;font-size:12px}
+        #musaumzRoot .panel{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:12px}
+      </style>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <div class="col">
+            <div style="font-size:18px;font-weight:700">MusAumz</div>
+            <div class="meta" id="health">API: …</div>
+            <div class="meta" id="engineMeta"></div>
+            <div class="meta" id="nowMeta"></div>
+          </div>
+          <div class="row">
+            <input id="files" type="file" multiple />
+            <button id="openSettings" type="button">Settings</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="prev" type="button">Prev</button>
+          <button id="playPause" type="button">Play</button>
+          <button id="next" type="button">Next</button>
+          <button id="crossfadeNow" type="button">Crossfade</button>
+          <div class="meta" id="time">0:00</div>
+        </div>
+
+        <div class="row">
+          <input id="seek" type="range" min="0" max="1000" value="0" style="flex:1" />
+        </div>
+
+        <div class="row">
+          <div class="col" style="min-width:180px">
+            <div class="meta">Volume</div>
+            <input id="vol" type="range" min="0" max="1" step="0.01" value="1" />
+          </div>
+          <div class="col" style="min-width:180px">
+            <div class="meta">Fade (sec)</div>
+            <input id="fadeSec" type="range" min="0.2" max="6" step="0.1" value="1.6" />
+          </div>
+          <div class="col" style="flex:1;min-width:220px">
+            <div class="meta" id="queueMeta"></div>
+            <div id="queue"></div>
+          </div>
+        </div>
+
+        <div class="row" style="justify-content:space-between">
+          <button id="fetchLyrics" type="button">Fetch Lyrics</button>
+          <div class="meta" id="lyricsMeta"></div>
+        </div>
+        <pre id="lyrics"></pre>
+
+        <audio id="audioA" preload="metadata" crossorigin="anonymous"></audio>
+        <audio id="audioB" preload="metadata" crossorigin="anonymous"></audio>
+      </div>
+
+      <dialog id="settings">
+        <form method="dialog" class="panel" style="min-width:min(760px, 92vw)">
+          <div style="font-weight:700;font-size:16px;margin-bottom:8px">Settings</div>
+          <div class="row">
+            <div class="col" style="flex:1;min-width:180px">
+              <div class="meta">Storefront</div>
+              <input id="storefront" type="text" value="us" />
+            </div>
+            <div class="col" style="flex:1;min-width:240px">
+              <div class="meta">Apple dev token</div>
+              <textarea id="devToken" rows="2"></textarea>
+            </div>
+            <div class="col" style="flex:1;min-width:240px">
+              <div class="meta">Apple user token</div>
+              <textarea id="userToken" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <label class="meta"><input id="toggleAutomix" type="checkbox" /> AutoMix</label>
+            <label class="meta"><input id="toggleSpatial" type="checkbox" /> Spatial</label>
+            <label class="meta"><input id="toggleAutoVol" type="checkbox" checked /> AutoVol</label>
+            <label class="meta"><input id="toggleAutoEq" type="checkbox" /> AutoEQ</label>
+            <button id="testApi" type="button">Test API</button>
+            <span class="meta" id="settingsStatus"></span>
+            <div style="flex:1"></div>
+            <button type="submit">Close</button>
+          </div>
+        </form>
+      </dialog>
+    `;
+    document.body.appendChild(root);
+  } catch {}
+}
 
 const STORAGE_KEY = 'musaumz_site_settings_v1';
 
@@ -131,9 +239,10 @@ function clamp(v, a, b) {
 async function __probeWithBackend(file, bufOpt) {
   try {
     if (!file) return null;
-    if (Number(file.size || 0) > 250 * 1024 * 1024) return null;
     const key = __fileKey(file);
     if (key && __probeCache.has(key)) return __probeCache.get(key);
+
+    try { await __resolveProxyBaseUrl(); } catch {}
 
     const buf = bufOpt || (await file.arrayBuffer());
     if (!buf || !buf.byteLength) return null;
@@ -153,7 +262,12 @@ async function __probeWithBackend(file, bufOpt) {
       headers['X-Filename'] = fn;
     } catch {}
 
-    const res = await fetch('/probe', { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    let res = await fetch(__apiUrl('/probe'), { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    if ((!res || !res.ok) && !res) {
+      try { localStorage.removeItem(PROXY_BASE_SELECTED_KEY); } catch {}
+      try { await __resolveProxyBaseUrl(); } catch {}
+      res = await fetch(__apiUrl('/probe'), { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    }
     try { clearTimeout(t); } catch {}
     if (!res || !res.ok) return null;
 
@@ -312,9 +426,9 @@ function __pcmFloatToWav(buffer, opts) {
 
 async function __decodeWithBackendToWavUrl(file, bufOpt) {
   try {
-    if (__decodeBackendTried && !__decodeBackendOk) return null;
     if (!file) return null;
-    if (Number(file.size || 0) > 250 * 1024 * 1024) return null;
+
+    try { await __resolveProxyBaseUrl(); } catch {}
 
     const buf = bufOpt || (await file.arrayBuffer());
     if (!buf || !buf.byteLength) return null;
@@ -345,10 +459,28 @@ async function __decodeWithBackendToWavUrl(file, bufOpt) {
     } catch {
       sr = 48000;
     }
-    const acOut = 2;
-    const url = `/decode?format=wav&sr=${encodeURIComponent(String(sr))}&ac=${encodeURIComponent(String(acOut))}`;
+    let acOut = 2;
+    try {
+      const mcc =
+        audioCtx && audioCtx.destination && typeof audioCtx.destination.maxChannelCount === 'number'
+          ? Number(audioCtx.destination.maxChannelCount || 0)
+          : 0;
+      if (mcc >= 8) acOut = 8;
+      else if (mcc >= 6) acOut = 6;
+      else if (mcc >= 2) acOut = 2;
+      else if (mcc === 1) acOut = 1;
+    } catch {
+      acOut = 2;
+    }
+    const url = __apiUrl(`/decode?format=wav&sr=${encodeURIComponent(String(sr))}&ac=${encodeURIComponent(String(acOut))}`);
 
-    const res = await fetch(url, { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    let res = await fetch(url, { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    if ((!res || !res.ok) && !res) {
+      try { localStorage.removeItem(PROXY_BASE_SELECTED_KEY); } catch {}
+      try { await __resolveProxyBaseUrl(); } catch {}
+      const url2 = __apiUrl(`/decode?format=wav&sr=${encodeURIComponent(String(sr))}&ac=${encodeURIComponent(String(acOut))}`);
+      res = await fetch(url2, { method: 'POST', headers, body: buf, signal: ac.signal }).catch(() => null);
+    }
     try { clearTimeout(t); } catch {}
 
     __decodeBackendTried = true;
@@ -592,9 +724,22 @@ async function __ensureFfmpegReady() {
     __ffmpegShared = inst;
     __ffmpegSharedLoading = (async () => {
       try {
+        const wantMt = !!(typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
+        if (wantMt) {
+          try {
+            const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/umd';
+            await inst.load({
+              coreURL: `${base}/ffmpeg-core.js`,
+              wasmURL: `${base}/ffmpeg-core.wasm`,
+              workerURL: `${base}/ffmpeg-core.worker.js`,
+            });
+            return;
+          } catch {}
+        }
+        const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
         await inst.load({
-          coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-          wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm',
+          coreURL: `${base}/ffmpeg-core.js`,
+          wasmURL: `${base}/ffmpeg-core.wasm`,
         });
       } catch {
         try {
@@ -624,6 +769,21 @@ async function __decodeFileWithFfmpegToWavUrl(file, opts = {}) {
       inName = `input_${seq}.${nameExt}`;
       outName = `output_${seq}.wav`;
 
+      let outSr = 48000;
+      try {
+        ensureAudio();
+        if (audioCtx && typeof audioCtx.sampleRate === 'number' && isFinite(audioCtx.sampleRate)) {
+          outSr = Math.max(8000, Math.min(192000, Math.round(audioCtx.sampleRate)));
+        }
+      } catch {
+        outSr = 48000;
+      }
+      try {
+        if (opts && typeof opts.sampleRate === 'number' && isFinite(opts.sampleRate)) {
+          outSr = Math.max(8000, Math.min(192000, Math.round(opts.sampleRate)));
+        }
+      } catch {}
+
       const buf = opts.buf || (await file.arrayBuffer());
       if (!buf || !buf.byteLength) return null;
 
@@ -637,13 +797,28 @@ async function __decodeFileWithFfmpegToWavUrl(file, opts = {}) {
 
       const mapAudio = opts.mapAudio ? ['0:a:0', '0:a:1', '0:a:2', '0:a:3', '0:a:4', '0:a:5', null] : [null];
       const forceFmt = String(opts.forceInputFormat || '').trim();
-      const forceStereo = opts.forceStereo !== false;
+      let forceStereo = opts.forceStereo !== false;
+      try {
+        if (forceStereo && audioCtx && audioCtx.destination && typeof audioCtx.destination.maxChannelCount === 'number') {
+          const mcc = Number(audioCtx.destination.maxChannelCount || 0);
+          if (mcc >= 6) forceStereo = false;
+        }
+      } catch {}
       const fastProbe = !!opts.fastProbe;
       const strategies = [
         { fast: fastProbe, fmt: forceFmt },
         { fast: false, fmt: forceFmt },
         { fast: false, fmt: '' },
       ];
+      const dolbyHint =
+        nameExt === 'ac3' ||
+        nameExt === 'eac3' ||
+        nameExt === 'ec3' ||
+        nameExt === 'ac4' ||
+        nameExt === 'ac-4' ||
+        prefer.includes('eac3') ||
+        prefer.includes('ac3') ||
+        prefer.includes('ac4');
 
       for (const st of strategies) {
         for (const mapSpec of mapAudio) {
@@ -656,11 +831,12 @@ async function __decodeFileWithFfmpegToWavUrl(file, opts = {}) {
               }
               if (st.fmt) args.push('-f', st.fmt);
               if (dec) args.push('-c:a', dec);
+              if (dolbyHint) args.push('-drc_scale', '0');
               args.push('-i', inName);
               if (mapSpec) args.push('-map', String(mapSpec));
               args.push('-vn', '-sn', '-dn');
               if (forceStereo) args.push('-ac', '2');
-              args.push('-ar', '48000');
+              args.push('-ar', String(outSr));
               args.push('-acodec', 'pcm_s16le', '-f', 'wav', outName);
               try { await ff.deleteFile(outName); } catch {}
               await ff.exec(args);
@@ -735,6 +911,7 @@ async function __maybeDecodeTrackToPlayableUrl(track, opts = {}) {
 
       const c = String(codec || '').toLowerCase();
       const isAlac = c.includes('alac');
+      const isEac3 = c.includes('ec-3') || c.includes('ec3') || c.includes('eac3');
       const isDolby =
         c.includes('ac-4') ||
         c.includes('ac4') ||
@@ -746,14 +923,18 @@ async function __maybeDecodeTrackToPlayableUrl(track, opts = {}) {
 
       const cn2 = String(codecName || '').toLowerCase();
       const isAlac2 = !isAlac && (cn2 === 'alac' || cn2.includes('alac'));
+      const isEac32 = !isEac3 && (cn2 === 'eac3' || cn2 === 'ec3' || cn2.includes('eac3') || cn2.includes('ec-3') || cn2.includes('ec3'));
       const isDolby2 =
         !isDolby &&
         (cn2 === 'ac3' || cn2 === 'eac3' || cn2 === 'ec3' || cn2 === 'ac4' || cn2.includes('ac3') || cn2.includes('eac3') || cn2.includes('ec3') || cn2.includes('ac4'));
 
       const playable = isM4a && codec ? __canPlayMp4AudioCodec(codec) : false;
 
+      const backendOnly = (isAlac || isAlac2) || isEac3 || isEac32 || ext === 'eac3' || ext === 'ec3';
+
       const shouldDecode =
         opts.force ||
+        backendOnly ||
         (isDolbyExt ? true : false) ||
         (isM4a && (isAlac || isAlac2) && !playable) ||
         (isM4a && (isDolby || isDolby2) && !playable);
@@ -764,24 +945,36 @@ async function __maybeDecodeTrackToPlayableUrl(track, opts = {}) {
         return false;
       }
 
-      if (isM4a && isAlac && (!playable || opts.force)) {
-        const aurUrl = await __decodeAlacWithAuroraToWavUrl(file, buf);
-        if (aurUrl) {
-          track.playUrl = aurUrl;
-          if (key) __decodeCache.set(key, aurUrl);
+      if (backendOnly) {
+        const backendUrl = await __decodeWithBackendToWavUrl(file, buf);
+        if (backendUrl) {
+          track.playUrl = backendUrl;
+          if (key) __decodeCache.set(key, backendUrl);
           track.__decodeDone = true;
           track.__decodeInFlight = false;
           return true;
         }
+        track.__decodeDone = true;
+        track.__decodeInFlight = false;
+        return false;
       }
 
       const prefer = (() => {
-        if (isAlac) return ['alac'];
+        if (isAlac || isAlac2) return ['alac'];
         if (c.includes('ac-4') || c.includes('ac4') || ext === 'ac4' || ext === 'ac-4') return ['ac4', 'eac3', 'ac3'];
         if (c.includes('ec-3') || c.includes('ec3') || c.includes('eac3') || ext === 'eac3' || ext === 'ec3') return ['eac3', 'ac3'];
         if (c.includes('ac-3') || c.includes('ac3') || ext === 'ac3') return ['ac3'];
         return ['eac3', 'ac3', 'ac4', 'alac'];
       })();
+
+      let wantStereo = true;
+      try {
+        ensureAudio();
+        const mcc = audioCtx && audioCtx.destination && typeof audioCtx.destination.maxChannelCount === 'number' ? Number(audioCtx.destination.maxChannelCount || 0) : 0;
+        if (mcc >= 6) wantStereo = false;
+      } catch {
+        wantStereo = true;
+      }
 
       const wavUrl = await __decodeFileWithFfmpegToWavUrl(file, {
         extHint: isM4a ? 'm4a' : ext,
@@ -789,7 +982,7 @@ async function __maybeDecodeTrackToPlayableUrl(track, opts = {}) {
         preferDecoder: prefer,
         fastProbe: true,
         mapAudio: true,
-        forceStereo: true,
+        forceStereo: wantStereo,
         forceInputFormat: isM4a ? 'mp4' : '',
       });
 
@@ -1873,6 +2066,8 @@ function wireUi() {
 }
 
 function init() {
+  try { __ensureShell(); } catch {}
+  try { els = __bindEls(); } catch {}
   loadSettings();
   applySettingsToUi();
 
@@ -1907,4 +2102,8 @@ function init() {
   updateTimeUiOnce();
 }
 
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init, { once: true });
+} else {
+  init();
+}

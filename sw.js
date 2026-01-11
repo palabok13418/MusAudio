@@ -5,7 +5,6 @@ const CORE_ASSETS = [
   '/index.html',
   '/pro',
   '/musaumz',
-  '/ts.html',
   '/styles.css',
   '/app.js',
   '/musaumz.js',
@@ -47,6 +46,8 @@ function isApiRequest(url) {
     if (p.startsWith('/health')) return true;
     if (p.startsWith('/engine')) return true;
     if (p.startsWith('/decode')) return true;
+    if (p.startsWith('/probe')) return true;
+    if (p.startsWith('/analyze')) return true;
     if (p.startsWith('/demucs')) return true;
     if (p.startsWith('/api/')) return true;
     return false;

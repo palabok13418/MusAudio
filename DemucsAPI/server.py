@@ -12,9 +12,11 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, UploadFile, Request, BackgroundTasks
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 ROOT = Path(__file__).resolve().parent
@@ -32,7 +34,7 @@ def _safe_ext(name: str) -> str:
     if not m:
         return "bin"
     ext = m.group(1)
-    if ext in {"wav", "mp3", "flac", "m4a", "mp4", "aac", "ogg", "opus", "webm", "ac3", "eac3", "ec3", "ac4"}:
+    if ext in {"wav", "mp3", "flac", "m4a", "mp4", "aac", "ogg", "opus", "webm", "ac3", "eac3", "ec3", "ac4", "alac"}:
         return ext
     return "bin"
 
@@ -98,6 +100,28 @@ def _run_volumedetect(path: Path, seconds: int = 0) -> Dict[str, Any]:
     return _parse_volumedetect(proc.stderr or "")
 
 
+def _max_upload_bytes() -> int:
+    try:
+        raw = str(os.environ.get("MAX_UPLOAD_BYTES") or "").strip()
+        if not raw:
+            return 0
+        v = int(raw)
+        return v if v > 0 else 0
+    except Exception:
+        return 0
+
+
+def _demucs_timeout_sec() -> int:
+    try:
+        raw = str(os.environ.get("DEMUCS_TIMEOUT_SEC") or "").strip()
+        if not raw:
+            return 0
+        v = int(raw)
+        return v if v > 0 else 0
+    except Exception:
+        return 0
+
+
 @dataclass
 class Job:
     id: str
@@ -112,18 +136,57 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["*"] ,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.mount("/files", StaticFiles(directory=str(DATA)), name="files")
 
+
+@app.middleware("http")
+async def _no_store_middleware(request: Request, call_next):
+    resp = await call_next(request)
+    try:
+        if str(request.url.path or "").startswith("/files"):
+            return resp
+    except Exception:
+        return resp
+    try:
+        if "cache-control" not in (resp.headers or {}):
+            resp.headers["Cache-Control"] = "no-store"
+    except Exception:
+        pass
+    return resp
+
 _jobs: Dict[str, Job] = {}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    code = int(getattr(exc, "status_code", 500) or 500)
+    err = "http_error"
+    if code == 404:
+        err = "not_found"
+    elif code == 405:
+        err = "method_not_allowed"
+    elif code == 413:
+        err = "too_large"
+    return JSONResponse({"ok": False, "error": err, "detail": str(getattr(exc, "detail", ""))[:4000]}, status_code=code)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse({"ok": False, "error": "invalid_request", "detail": str(exc)[:4000]}, status_code=400)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse({"ok": False, "error": "internal_error", "detail": str(exc)[:4000]}, status_code=500)
 
 
 @app.get("/health")
 async def health() -> Dict[str, Any]:
-    return {"ok": True, "service": "demucs", "model": "htdemucs_6s"}
+    return {"ok": True, "status": "ok", "runtime": "python", "service": "demucs", "model": "htdemucs_6s"}
 
 
 @app.get("/engine")
@@ -227,6 +290,8 @@ async def probe_audio(req: Request, background_tasks: BackgroundTasks) -> JSONRe
     job_id = uuid.uuid4().hex
     in_path = UPLOADS / f"probe_{job_id}.{ext}"
 
+    max_bytes = _max_upload_bytes()
+
     try:
         total = 0
         with in_path.open("wb") as f:
@@ -235,7 +300,7 @@ async def probe_audio(req: Request, background_tasks: BackgroundTasks) -> JSONRe
                     continue
                 f.write(chunk)
                 total += len(chunk)
-                if total > 250 * 1024 * 1024:
+                if max_bytes and total > max_bytes:
                     try:
                         in_path.unlink(missing_ok=True)
                     except Exception:
@@ -281,6 +346,8 @@ async def analyze_audio(req: Request, background_tasks: BackgroundTasks) -> JSON
     job_id = uuid.uuid4().hex
     in_path = UPLOADS / f"analyze_{job_id}.{ext}"
 
+    max_bytes = _max_upload_bytes()
+
     try:
         total = 0
         with in_path.open("wb") as f:
@@ -289,7 +356,7 @@ async def analyze_audio(req: Request, background_tasks: BackgroundTasks) -> JSON
                     continue
                 f.write(chunk)
                 total += len(chunk)
-                if total > 250 * 1024 * 1024:
+                if max_bytes and total > max_bytes:
                     try:
                         in_path.unlink(missing_ok=True)
                     except Exception:
@@ -370,13 +437,15 @@ async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileR
         ac_raw = str(req.query_params.get("ac") or req.query_params.get("channels") or "").strip()
         if ac_raw:
             ac_i = int(ac_raw)
-            if ac_i in (1, 2):
+            if 1 <= ac_i <= 8:
                 ac = ac_i
     except Exception:
         ac = 2
 
     out_ext = "wav" if fmt == "wav" else ("mp3" if fmt == "mp3" else "m4a")
     out_path = JOBS / f"decode_{job_id}.{out_ext}"
+
+    max_bytes = _max_upload_bytes()
 
     try:
         total = 0
@@ -386,7 +455,7 @@ async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileR
                     continue
                 f.write(chunk)
                 total += len(chunk)
-                if total > 250 * 1024 * 1024:
+                if max_bytes and total > max_bytes:
                     try:
                         in_path.unlink(missing_ok=True)
                     except Exception:
@@ -415,6 +484,13 @@ async def decode_audio(req: Request, background_tasks: BackgroundTasks) -> FileR
             "-y",
             "-fflags",
             "+discardcorrupt",
+        ]
+        try:
+            if ext in {"ac3", "eac3", "ec3"}:
+                base_cmd += ["-drc_scale", "0"]
+        except Exception:
+            pass
+        base_cmd += [
             "-i",
             str(in_path),
             "-vn",
@@ -490,6 +566,8 @@ async def demucs_upload(req: Request, file: UploadFile = File(...)) -> JSONRespo
     ext = _safe_ext(file.filename)
     up_id = uuid.uuid4().hex
     dest = UPLOADS / f"{up_id}.{ext}"
+    max_bytes = _max_upload_bytes()
+    total = 0
     try:
         with dest.open("wb") as f:
             while True:
@@ -497,11 +575,28 @@ async def demucs_upload(req: Request, file: UploadFile = File(...)) -> JSONRespo
                 if not chunk:
                     break
                 f.write(chunk)
+                total += len(chunk)
+                if max_bytes and total > max_bytes:
+                    break
     finally:
         try:
             await file.close()
         except Exception:
             pass
+
+    if total <= 0:
+        try:
+            dest.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return JSONResponse({"ok": False, "error": "empty_body"}, status_code=400)
+
+    if max_bytes and total > max_bytes:
+        try:
+            dest.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return JSONResponse({"ok": False, "error": "too_large"}, status_code=413)
 
     audio_url = f"{_url_base(req)}/files/uploads/{dest.name}"
     return JSONResponse({"ok": True, "audio_url": audio_url})
@@ -546,6 +641,9 @@ async def _run_demucs(job: Job, model: str) -> None:
     ]
 
     def _call() -> subprocess.CompletedProcess:
+        timeout = _demucs_timeout_sec()
+        if timeout and timeout > 0:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return subprocess.run(cmd, capture_output=True, text=True)
 
     proc = await asyncio.to_thread(_call)
@@ -595,6 +693,13 @@ async def demucs_start(req: Request, payload: Dict[str, Any]) -> JSONResponse:
     model = str(payload.get("model") or "htdemucs_6s").strip()
     if not model:
         model = "htdemucs_6s"
+    try:
+        if len(model) > 64:
+            return JSONResponse({"ok": False, "error": "invalid_model"}, status_code=400)
+        if not re.match(r"^[a-zA-Z0-9_\-\.]+$", model):
+            return JSONResponse({"ok": False, "error": "invalid_model"}, status_code=400)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid_model"}, status_code=400)
 
     input_path = _resolve_audio_url_to_path(audio_url)
     if input_path is None:

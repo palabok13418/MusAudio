@@ -1,27 +1,26 @@
-function corsHeaders(origin) {
-  const o = String(origin || '').trim();
-  const allow = o ? o : '*';
-  return {
-    'Access-Control-Allow-Origin': allow,
-    'Vary': 'Origin',
-    'Access-Control-Allow-Methods': 'GET,OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization,Music-User-Token,Content-Type,Accept',
-    'Cache-Control': 'no-store',
-    'Content-Type': 'application/json; charset=utf-8',
-  };
-}
+const { corsHeaders, getOrigin, handleOptions, sendJson } = require('./demucs/_util');
 
 module.exports = async function handler(req, res) {
-  const origin = req && req.headers ? (req.headers.origin || req.headers.Origin) : '';
+  const methods = 'GET,HEAD,OPTIONS';
+  const origin = getOrigin(req);
 
   if (req && req.method === 'OPTIONS') {
-    const h = corsHeaders(origin);
-    for (const k of Object.keys(h)) res.setHeader(k, h[k]);
-    res.status(204).send('');
+    handleOptions(req, res, methods);
     return;
   }
 
-  const h = corsHeaders(origin);
-  for (const k of Object.keys(h)) res.setHeader(k, h[k]);
-  res.status(200).json({ ok: true, status: 'ok', runtime: 'vercel' });
-}
+  const m = String(req && req.method ? req.method : 'GET').toUpperCase();
+  if (m !== 'GET' && m !== 'HEAD') {
+    sendJson(res, origin, methods, 405, { ok: false, error: 'method_not_allowed' });
+    return;
+  }
+
+  if (m === 'HEAD') {
+    const h = { ...corsHeaders(origin, methods), 'Content-Type': 'application/json; charset=utf-8' };
+    for (const k of Object.keys(h)) res.setHeader(k, h[k]);
+    res.status(200).send('');
+    return;
+  }
+
+  sendJson(res, origin, methods, 200, { ok: true, status: 'ok', runtime: 'vercel' });
+};

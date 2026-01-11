@@ -28,13 +28,6 @@ export async function onRequest(context: any): Promise<Response> {
     });
   }
 
-  if ((raw as ArrayBuffer).byteLength > 250 * 1024 * 1024) {
-    return new Response(JSON.stringify({ ok: false, error: 'too_large' }), {
-      status: 413,
-      headers: { ...headers, 'Content-Type': 'application/json; charset=utf-8' },
-    });
-  }
-
   const base = String(env.ANALYZE_BACKEND_URL || env.PROBE_BACKEND_URL || env.DECODE_BACKEND_URL || env.DEMUCS_BACKEND_URL || '').trim();
   if (!base) {
     return new Response(

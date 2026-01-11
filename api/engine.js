@@ -1,11 +1,4 @@
-function setCors(res) {
-  try {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization,Music-User-Token,Content-Type,Accept');
-    res.setHeader('Cache-Control', 'no-store');
-  } catch {}
-}
+const { corsHeaders, getOrigin, handleOptions, sendJson } = require('./demucs/_util');
 
 function engineProfile(runtime) {
   return {
@@ -33,30 +26,32 @@ function engineProfile(runtime) {
 
 module.exports = async function handler(req, res) {
   try {
-    setCors(res);
+    const methods = 'GET,HEAD,OPTIONS';
+    const origin = getOrigin(req);
 
     if (req && req.method === 'OPTIONS') {
-      res.status(204).send('');
+      handleOptions(req, res, methods);
       return;
     }
 
-    if (req && req.method && req.method !== 'GET' && req.method !== 'HEAD') {
-      res.status(405).send('Method not allowed');
+    const m = String(req && req.method ? req.method : 'GET').toUpperCase();
+    if (m !== 'GET' && m !== 'HEAD') {
+      sendJson(res, origin, methods, 405, { ok: false, error: 'method_not_allowed' });
       return;
     }
 
-    const body = JSON.stringify(engineProfile('vercel'));
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-
-    if (req.method === 'HEAD') {
+    if (m === 'HEAD') {
+      const h = { ...corsHeaders(origin, methods), 'Content-Type': 'application/json; charset=utf-8' };
+      for (const k of Object.keys(h)) res.setHeader(k, h[k]);
       res.status(200).send('');
       return;
     }
 
-    res.status(200).send(body);
+    sendJson(res, origin, methods, 200, engineProfile('vercel'));
   } catch {
     try {
-      res.status(200).send(JSON.stringify({ ok: true, status: 'ok', runtime: 'vercel', version: 'engine_v1' }));
+      const origin = getOrigin(req);
+      sendJson(res, origin, 'GET,HEAD,OPTIONS', 200, { ok: true, status: 'ok', runtime: 'vercel', version: 'engine_v1' });
     } catch {}
   }
 };

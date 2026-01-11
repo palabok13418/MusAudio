@@ -78,14 +78,6 @@ exports.handler = async (event) => {
     };
   }
 
-  if (bodyBuf.length > 250 * 1024 * 1024) {
-    return {
-      statusCode: 413,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ ok: false, error: 'too_large' }),
-    };
-  }
-
   const inHeaders = event && event.headers ? event.headers : {};
   const fn = inHeaders['x-filename'] || inHeaders['X-Filename'] || '';
 

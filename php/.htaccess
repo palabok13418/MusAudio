@@ -1,0 +1,10 @@
+RewriteEngine On
+
+RewriteRule ^health$ health.php [L]
+RewriteRule ^engine$ engine.php [L]
+RewriteRule ^amp$ amp.php [L,QSA]
+RewriteRule ^decode$ decode.php [L,QSA]
+RewriteRule ^probe$ probe.php [L,QSA]
+RewriteRule ^analyze$ analyze.php [L,QSA]
+
+RewriteRule ^$ index.php [L]

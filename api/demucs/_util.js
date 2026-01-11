@@ -8,7 +8,8 @@ function corsHeaders(origin, methods) {
     'Access-Control-Allow-Origin': allow,
     'Vary': 'Origin',
     'Access-Control-Allow-Methods': methods,
-    'Access-Control-Allow-Headers': 'Content-Type,Accept,Range,If-None-Match,If-Modified-Since,X-Filename',
+    'Access-Control-Allow-Headers': 'Authorization,Music-User-Token,Content-Type,Accept,Range,If-None-Match,If-Modified-Since,X-Filename',
+    'Access-Control-Expose-Headers': 'Content-Type,Content-Length,Content-Range,Accept-Ranges,ETag,Last-Modified,Cache-Control,Content-Encoding,Content-Disposition',
     'Cache-Control': 'no-store',
   };
 }
@@ -184,6 +185,7 @@ function proxyStream(req, res, methods, url) {
 }
 
 module.exports = {
+  corsHeaders,
   getOrigin,
   buildBackendUrl,
   publicBase,
