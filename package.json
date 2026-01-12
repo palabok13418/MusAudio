@@ -6,20 +6,22 @@
   "license": "UNLICENSED",
   "packageManager": "npm@10.0.0",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "scripts": {
     "vendor:fetch": "node scripts/vendor-fetch.mjs",
-    "prebuild": "node scripts/vendor-fetch.mjs",
+    "cloud:gen": "node scripts/cloud-library-gen.mjs",
+    "prebuild": "node scripts/vendor-fetch.mjs && node scripts/cloud-library-gen.mjs",
     "build": "vite build",
     "deploy:pages": "npx wrangler pages deploy dist",
-    "prevercel-build": "node scripts/vendor-fetch.mjs",
+    "prevercel-build": "node scripts/vendor-fetch.mjs && node scripts/cloud-library-gen.mjs",
     "vercel-build": "vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "dev": "http-server -c-1 -p 5173 .",
+    "predev:vite": "node scripts/cloud-library-gen.mjs",
     "dev:vite": "vite --port 5174 --strictPort",
     "build:vite": "vite build",
     "preview:vite": "vite preview --port 5174 --strictPort"

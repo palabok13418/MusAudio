@@ -1,4 +1,4 @@
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const ASSETS = [
@@ -69,7 +69,7 @@ const ASSETS = [
   },
 
   {
-    url: 'https://unpkg.com/@applemusic-like-lyrics/core@0.2.0/dist/amll-core.esm.js',
+    url: 'https://esm.sh/@applemusic-like-lyrics/core@0.2.0?bundle',
     out: 'public/vendor/amll/amll-core.esm.js',
   },
   {
@@ -101,8 +101,34 @@ async function existsNonEmpty(path) {
   }
 }
 
-async function fetchToFile(url, out) {
-  await mkdir(dirname(out), { recursive: true });
+function mirrorOutPaths(out) {
+  try {
+    const s = String(out || '');
+    if (s.startsWith('public/vendor/')) return [`vendor/${s.slice('public/vendor/'.length)}`];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeMirrorsFromPrimary(primaryOut, mirrors) {
+  try {
+    if (!mirrors || !mirrors.length) return;
+    if (!(await existsNonEmpty(primaryOut))) return;
+    const buf = await readFile(primaryOut);
+    if (!buf || !buf.length) return;
+    for (const m of mirrors) {
+      if (await existsNonEmpty(m)) continue;
+      await mkdir(dirname(m), { recursive: true });
+      await writeFile(m, buf);
+    }
+  } catch {}
+}
+
+async function fetchToFiles(url, outs) {
+  const list = Array.isArray(outs) ? outs.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  if (!list.length) return;
+  for (const out of list) await mkdir(dirname(out), { recursive: true });
 
   const res = await fetch(url, {
     headers: {
@@ -116,17 +142,61 @@ async function fetchToFile(url, out) {
   const ab = await res.arrayBuffer();
   const buf = Buffer.from(ab);
   if (!buf.length) throw new Error('Empty response');
-  await writeFile(out, buf);
+  for (const out of list) {
+    await writeFile(out, buf);
+  }
+}
+
+async function indexVendorRefs() {
+  try {
+    const html = await readFile('index.html', 'utf8');
+    const set = new Set();
+    const re = /\.\/vendor\/[^'"\s<>]+/g;
+    const hits = html.match(re) || [];
+    for (const h of hits) {
+      const s = String(h || '').trim();
+      if (!s) continue;
+      const rel = s.replace(/^\.\//, '');
+      const base = rel.split('/').pop() || '';
+      if (!base.includes('.')) continue;
+      set.add(rel);
+    }
+    return Array.from(set);
+  } catch {
+    return [];
+  }
 }
 
 async function main() {
   if (process.env.SKIP_VENDOR_FETCH === '1') return;
 
+  try { await mkdir('public/vendor', { recursive: true }); } catch {}
+  try { await mkdir('vendor', { recursive: true }); } catch {}
+
+  try {
+    const refs = await indexVendorRefs();
+    const known = new Set(
+      ASSETS.map((a) => String(a && a.out ? a.out : ''))
+        .filter(Boolean)
+        .map((p) => (p.startsWith('public/') ? p.slice('public/'.length) : p))
+    );
+    const missing = refs.filter((r) => !known.has(String(r)));
+    if (missing.length) {
+      console.warn('[vendor-fetch] Missing asset mappings for index.html vendor refs:');
+      for (const m of missing.slice(0, 30)) console.warn('  - ' + m);
+      if (missing.length > 30) console.warn(`  ...and ${missing.length - 30} more`);
+    }
+  } catch {}
+
   let failures = 0;
   for (const a of ASSETS) {
     try {
-      if (await existsNonEmpty(a.out)) continue;
-      await fetchToFile(a.url, a.out);
+      const mirrors = mirrorOutPaths(a.out);
+      if (await existsNonEmpty(a.out)) {
+        await writeMirrorsFromPrimary(a.out, mirrors);
+        continue;
+      }
+      await fetchToFiles(a.url, [a.out, ...mirrors]);
     } catch (e) {
       failures++;
       console.warn(`[vendor-fetch] Failed: ${a.url} -> ${a.out}`);

@@ -71,6 +71,18 @@ module.exports = async function handler(req, res) {
   const mut = req && req.headers ? (req.headers['music-user-token'] || req.headers['Music-User-Token'] || req.headers['Music-user-token']) : '';
   if (auth) headers['Authorization'] = auth;
   if (mut) headers['Music-User-Token'] = mut;
+  if (!headers['Authorization']) {
+    try {
+      const raw = String(process.env.APPLE_MUSIC_DEV_TOKEN || process.env.APPLE_MUSIC_DEVELOPER_TOKEN || process.env.AM_DEV_TOKEN || '').trim();
+      if (raw) headers['Authorization'] = raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`;
+    } catch {}
+  }
+  if (!headers['Music-User-Token']) {
+    try {
+      const raw = String(process.env.APPLE_MUSIC_USER_TOKEN || process.env.AM_USER_TOKEN || '').trim();
+      if (raw) headers['Music-User-Token'] = raw;
+    } catch {}
+  }
   headers['Accept'] = (req && req.headers ? (req.headers.accept || req.headers.Accept) : '') || '*/*';
 
   const range = req && req.headers ? (req.headers.range || req.headers.Range) : '';

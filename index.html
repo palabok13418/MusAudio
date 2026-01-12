@@ -10,12 +10,42 @@
   <meta property="og:title" content="MusAudio">
   <meta property="og:description" content="An Actual Audio Player Made For HTML Users">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="./favicon.png">
+  <meta property="og:image" content="./favicon/android-chrome-512x512.png">
   <title>MusAudio</title>
-  <link rel="icon" type="image/gif" href="./favicon.gif">
-  <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="apple-touch-icon" href="./favicon.png">
+  <link id="siteFavicon" rel="icon" type="image/x-icon" href="./favicon/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./favicon/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./favicon/apple-touch-icon.png">
   <link rel="manifest" href="./manifest.webmanifest">
+  <script>
+    (function(){
+      try {
+        const ua = String(navigator.userAgent || '');
+        const isChrome = ua.includes('Chrome') && !ua.includes('Edg/') && !ua.includes('OPR/');
+        if (!isChrome) return;
+
+        const icons = Array.from(document.querySelectorAll('link[rel="icon"]'));
+        for (const el of icons) {
+          try {
+            if (!el) continue;
+            if (el.id === 'siteFavicon') continue;
+            if (el.parentNode) el.parentNode.removeChild(el);
+          } catch {}
+        }
+
+        const fav = document.getElementById('siteFavicon');
+        if (!fav) return;
+        fav.type = 'image/gif';
+        fav.href = './favicon.gif';
+        fav.addEventListener('error', ()=>{
+          try {
+            fav.type = 'image/x-icon';
+            fav.href = './favicon/favicon.ico';
+          } catch {}
+        }, { once: true });
+      } catch {}
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link id="materialSymbolsCss" rel="stylesheet" href="./vendor/material-symbols/material-symbols-outlined.css" vite-ignore>
@@ -308,7 +338,9 @@
 
     .surface.library { display: grid; grid-template-rows: auto 1fr; gap: 10px; min-height: 0; }
     .surface.library .lib-head { display: grid; gap: 10px; min-width: 0; }
-    .surface.library .lib-bar { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; min-width: 0; }
+    .surface.library .lib-bar { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; align-items: center; min-width: 0; }
+    .surface.library .lib-mode-toggle { padding: 10px 12px; border-radius: 9999px; white-space: nowrap; }
+    .surface.library .lib-mode-toggle.on { outline: 2px solid color-mix(in oklab, var(--accent) 45%, transparent); }
     .surface.library .search { position: relative; min-width: 0; }
     .surface.library .search input { width: 100%; padding: 10px 36px 10px 36px; border-radius: 9999px; border: 1px solid rgba(255,255,255,.14); background: rgba(0,0,0,.10); color: var(--text); outline: none; }
     .surface.library .search .icon.left { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
@@ -688,6 +720,7 @@
         <div class="lib-head">
           <div class="lib-bar">
             <button id="insertBtn" class="btn"><span class="icon">add</span>Insert</button>
+            <button id="libModeToggle" class="btn pill lib-mode-toggle" title="Library mode"><span class="icon" id="libModeIcon">computer</span><span id="libModeLabel">Local</span></button>
             <div class="search">
               <span class="icon left">search</span>
               <input id="search" placeholder="Search title, artist, album" autocomplete="off" />
@@ -1000,19 +1033,6 @@
               </select>
             </div>
           </label>
-          <button id="distributeBtn" class="btn" style="margin-left:auto;"><span class="icon">ios_share</span>Distribute this copy…</button>
-          <div style="position:relative; flex:1 1 280px; min-width:200px;">
-            <input id="appleMusicProxyBaseUrl" type="text" placeholder="Apple proxy base URL (optional)"
-              style="width:100%; padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text);" />
-          </div>
-          <div style="position:relative; flex:1 1 280px; min-width:200px;">
-            <input id="appleMusicDevToken" type="password" placeholder="Apple Music bearer (developer) token"
-              style="width:100%; padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text);" />
-          </div>
-          <div style="position:relative; flex:1 1 280px; min-width:200px;">
-            <input id="appleMusicUserToken" type="password" placeholder="Apple Music user token (Music-User-Token)"
-              style="width:100%; padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text);" />
-          </div>
           <div style="position:relative; flex:1 1 220px; min-width:180px;">
             <input id="weatherLocation" type="text" placeholder="Weather location (city, country)"
               style="width:100%; padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text);" />
@@ -1355,6 +1375,7 @@
     const state = {
       tracks: [],
       current: -1,
+      libraryMode: 'local',
       shuffle: false,
       loop: false,
       automix: false,
@@ -1408,6 +1429,7 @@
       search: d('#search'),
       clearSearch: d('#clearSearch'),
       insertBtn: d('#insertBtn'),
+      libModeToggle: d('#libModeToggle'),
       libCount: d('#libCount'),
       insertOverlay: d('#insertOverlay'),
       pickFiles: d('#pickFiles'),
@@ -1433,17 +1455,16 @@
       weatherLocationSuggestions: d('#weatherLocationSuggestions'),
       weatherUnitF: d('#weatherUnitF'),
       emailProvider: d('#emailProvider'),
-      appleMusicProxyBaseUrlInput: d('#appleMusicProxyBaseUrl'),
-      appleMusicDevTokenInput: d('#appleMusicDevToken'),
-      appleMusicUserTokenInput: d('#appleMusicUserToken'),
       cameraBlackoutToggle: d('#cameraBlackoutToggle'),
       tabTitleTemplate: d('#tabTitleTemplate'),
       fadePlaybackToggle: d('#fadePlaybackToggle'),
+
       demucsBackendBaseUrlInput: d('#demucsBackendBaseUrl'),
       codenameOverlay: d('#codenameOverlay'),
       codenameInput: d('#codenameInput'),
       codenameSave: d('#codenameSave'),
       codenameCancel: d('#codenameCancel'),
+
       // Tag Editor
       tagEditorOverlay: d('#tagEditorOverlay'),
       tagClose: d('#tagClose'),
@@ -1547,6 +1568,147 @@
       distEmailProvider: d('#distEmailProvider'),
     };
 
+    const __librarySnapshots = { local: null, cloud: null };
+
+    function __snapshotLibraryState(){
+      try {
+        return {
+          tracks: Array.isArray(state.tracks) ? state.tracks : [],
+          current: (typeof state.current === 'number') ? state.current : -1,
+          knownFiles: (state.knownFiles instanceof Set) ? state.knownFiles : new Set(),
+          queue: Array.isArray(state.queue) ? state.queue : [],
+          queueOpen: !!state.queueOpen,
+          queueDirty: !!state.queueDirty,
+          lastFolderHandle: state.lastFolderHandle || null,
+        };
+      } catch {
+        return { tracks: [], current: -1, knownFiles: new Set(), queue: [], queueOpen: false, queueDirty: false, lastFolderHandle: null };
+      }
+    }
+
+    function __applyLibraryState(snap){
+      try {
+        const s = (snap && typeof snap === 'object') ? snap : null;
+        state.tracks = (s && Array.isArray(s.tracks)) ? s.tracks : [];
+        state.current = (s && typeof s.current === 'number') ? s.current : -1;
+        state.knownFiles = (s && (s.knownFiles instanceof Set)) ? s.knownFiles : new Set();
+        state.queue = (s && Array.isArray(s.queue)) ? s.queue : [];
+        state.queueOpen = !!(s && s.queueOpen);
+        state.queueDirty = !!(s && s.queueDirty);
+        state.lastFolderHandle = (s && s.lastFolderHandle) ? s.lastFolderHandle : null;
+      } catch {}
+    }
+
+    function __updateLibraryModeUI(){
+      try {
+        const mode = String(state.libraryMode||'local').toLowerCase() === 'cloud' ? 'cloud' : 'local';
+        const label = d('#libModeLabel');
+        const icon = d('#libModeIcon');
+        if (label) label.textContent = (mode === 'cloud') ? 'Cloud' : 'Local';
+        if (icon) icon.textContent = (mode === 'cloud') ? 'cloud' : 'computer';
+        if (ui.libModeToggle) ui.libModeToggle.classList.toggle('on', mode === 'cloud');
+        try { if (ui.insertBtn) ui.insertBtn.disabled = (mode === 'cloud'); } catch {}
+      } catch {}
+    }
+
+    async function __loadCloudLibraryFromManifest(){
+      try {
+        const res = await fetch('/cloud/library.json', { cache:'no-store' }).catch(()=>null);
+        if (!res || !res.ok) return false;
+        const json = await res.json().catch(()=>null);
+        const arr = Array.isArray(json) ? json : (Array.isArray(json && json.tracks) ? json.tracks : []);
+        if (!arr || !arr.length) return false;
+
+        const out = [];
+        for (const it of arr) {
+          try {
+            const u = String(it && (it.url || it.path || it.href) || '').trim();
+            if (!u) continue;
+            const title = String(it.title||it.name||'').trim() || String((u.split('/').pop()||'')).replace(/\.[^.]+$/,'');
+            out.push({
+              file: null,
+              url: u,
+              title,
+              artist: String(it.artist||'').trim(),
+              album: String(it.album||'').trim(),
+              weblink: String(it.weblink||it.appleMusicUrl||'').trim(),
+              coverUrl: '',
+              status: 'Cloud',
+              fp: String(it.id||('cloud::'+u)),
+              lyrics: (typeof it.lyrics === 'string') ? it.lyrics : '',
+              hasLrc: false,
+              lrc: [],
+              __cloud: true,
+            });
+          } catch {}
+        }
+        if (!out.length) return false;
+
+        state.tracks = out;
+        state.current = -1;
+        state.queue = [];
+        state.queueOpen = false;
+        state.queueDirty = false;
+        state.knownFiles = new Set(out.map(t=> t.fp));
+
+        try {
+          for (let i=0;i<Math.min(18, out.length);i++) enqueueAppleCoverResolve(out[i]);
+        } catch {}
+
+        try { renderList(); } catch {}
+        try { updateNow(); } catch {}
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    async function switchLibraryMode(mode){
+      try {
+        const next = String(mode||'').toLowerCase() === 'cloud' ? 'cloud' : 'local';
+        const cur = String(state.libraryMode||'local').toLowerCase() === 'cloud' ? 'cloud' : 'local';
+        if (cur === next) {
+          __updateLibraryModeUI();
+          try {
+            if (!(next === 'cloud' && (!state.tracks || !state.tracks.length) && !__librarySnapshots.cloud)) return;
+          } catch { return; }
+        }
+
+        try { closeAllCardMenus(); } catch {}
+        try { stopLyricsLoop(); } catch {}
+        try { pause(); } catch {}
+        try { stopLastFolderWatcher(); } catch {}
+
+        __librarySnapshots[cur] = __snapshotLibraryState();
+
+        if (next === 'cloud') {
+          if (__librarySnapshots.cloud) {
+            __applyLibraryState(__librarySnapshots.cloud);
+          } else {
+            const ok = await __loadCloudLibraryFromManifest();
+            if (!ok) {
+              __applyLibraryState(__librarySnapshots[cur] || { tracks:[], current:-1, knownFiles:new Set(), queue:[], queueOpen:false, queueDirty:false, lastFolderHandle:null });
+              try { siteSays('Cloud library manifest not found.'); } catch {}
+              state.libraryMode = cur;
+              __updateLibraryModeUI();
+              return;
+            }
+            __librarySnapshots.cloud = __snapshotLibraryState();
+          }
+        } else {
+          __applyLibraryState(__librarySnapshots.local || { tracks:[], current:-1, knownFiles:new Set(), queue:[], queueOpen:false, queueDirty:false, lastFolderHandle:null });
+        }
+
+        state.libraryMode = next;
+        __updateLibraryModeUI();
+        try { persist(); } catch {}
+        try { renderList(); } catch {}
+        try { if (!state.queueDirty) rebuildQueue(); } catch {}
+        try { if (state.queueOpen) renderQueueList(); } catch {}
+        try { updateNow(); } catch {}
+      } catch {}
+    }
+
     // Low-CPU profile for ChromeOS (extra for CTL) with user override from performance dropdown
     function computeCpuProfileFromDistribution(osCfg){
       try {
@@ -1610,134 +1772,23 @@
     }
 
     function getAppleMusicDevToken(){
-      try {
-        const t0 = String(state.appleMusicDevToken||'').trim();
-        if (t0) return t0;
-      } catch {}
-      try {
-        const t1 = String(sessionStorage.getItem('apple_music_dev_token')||'').trim();
-        if (t1) return t1;
-      } catch {}
-      try {
-        const t2 = String(localStorage.getItem('apple_music_dev_token')||'').trim();
-        if (t2) return t2;
-      } catch {}
-      try {
-        const cfg = (typeof window!=='undefined') ? window.MUS_DISTRIBUTION_CONFIG : null;
-        const t3 = String(cfg?.appleMusicDevToken||'').trim();
-        if (t3) return t3;
-      } catch {}
-      return '';
+      try { return ''; } catch { return ''; }
     }
 
     function getAppleMusicUserToken(){
-      try {
-        const t0 = String(state.appleMusicUserToken||'').trim();
-        if (t0) return t0;
-      } catch {}
-      try {
-        const t1 = String(sessionStorage.getItem('apple_music_user_token')||'').trim();
-        if (t1) return t1;
-      } catch {}
-      try {
-        const t2 = String(localStorage.getItem('apple_music_user_token')||'').trim();
-        if (t2) return t2;
-      } catch {}
-      try {
-        const cfg = (typeof window!=='undefined') ? window.MUS_DISTRIBUTION_CONFIG : null;
-        const t3 = String(cfg?.appleMusicUserToken||'').trim();
-        if (t3) return t3;
-      } catch {}
-      return '';
-    }
-
-    function getAppleMusicProxyBaseUrl(){
-      try {
-        const u0 = String(state.appleMusicProxyBaseUrl||'').trim();
-        if (u0) return u0;
-      } catch {}
-      try {
-        const u1 = String(sessionStorage.getItem('apple_music_proxy_base_url')||'').trim();
-        if (u1) return u1;
-      } catch {}
-      try {
-        const u2 = String(localStorage.getItem('apple_music_proxy_base_url')||'').trim();
-        if (u2) return u2;
-      } catch {}
-      try {
-        const cfg = (typeof window!=='undefined') ? window.MUS_DISTRIBUTION_CONFIG : null;
-        const u3 = String(cfg?.appleMusicProxyBaseUrl||'').trim();
-        if (u3) return u3;
-      } catch {}
-      return '';
+      try { return ''; } catch { return ''; }
     }
 
     const APPLE_MUSIC_PROXY_SELECTED_KEY = 'apple_music_proxy_base_url_selected';
-
-    const APPLE_MUSIC_PROXY_BASE_URL_KEY = 'apple_music_proxy_base_url';
 
     function normalizeProxyBaseUrl(u){
       try { return String(u||'').trim().replace(/\/+$/,''); } catch { return ''; }
     }
 
-    function splitProxyBaseUrls(raw){
-      try {
-        const s = String(raw||'').trim();
-        if (!s) return [];
-        const parts = s.replace(/[\r\n,;]+/g,' ').split(/\s+/).filter(Boolean);
-        const out = [];
-        const seen = new Set();
-        for (const p of parts) {
-          const n = normalizeProxyBaseUrl(p);
-          if (!n) continue;
-          if (!/^https?:\/\//i.test(n)) continue;
-          if (seen.has(n)) continue;
-          seen.add(n);
-          out.push(n);
-        }
-        return out;
-      } catch { return []; }
-    }
-
-    function setAppleMusicProxyBaseUrl(urls, opts){
-      try {
-        const s = String(urls||'').trim();
-        state.appleMusicProxyBaseUrl = s;
-        const persistToDisk = (typeof opts === 'boolean') ? opts : !!(opts && opts.persist);
-        if (persistToDisk) {
-          try { localStorage.setItem(APPLE_MUSIC_PROXY_BASE_URL_KEY, s); } catch {}
-          try { sessionStorage.removeItem(APPLE_MUSIC_PROXY_BASE_URL_KEY); } catch {}
-        } else {
-          try { sessionStorage.setItem(APPLE_MUSIC_PROXY_BASE_URL_KEY, s); } catch {}
-        }
-        return true;
-      } catch { return false; }
-    }
-
     function getAppleMusicProxyBaseUrlCandidates(){
       try {
-        const raw = String(getAppleMusicProxyBaseUrl()||'').trim();
-        const list = splitProxyBaseUrls(raw);
-        const out = [];
-        const seen = new Set();
-        for (const u of (list || [])) {
-          const n = normalizeProxyBaseUrl(u);
-          if (!n) continue;
-          if (seen.has(n)) continue;
-          seen.add(n);
-          out.push(n);
-        }
-        for (const u of [ 'https://musaudio.vercel.app', 'https://musaudio.netlify.app' ]) {
-          const n = normalizeProxyBaseUrl(u);
-          if (!n) continue;
-          if (seen.has(n)) continue;
-          seen.add(n);
-          out.push(n);
-        }
-        return out;
-      } catch {
-        return [ 'https://musaudio.vercel.app', 'https://musaudio.netlify.app' ];
-      }
+        return [ 'https://musaudio.vercel.app', 'https://musaudio.netlify.app' ].map(normalizeProxyBaseUrl).filter(Boolean);
+      } catch { return []; }
     }
 
     function getAppleMusicProxyBaseUrlSelected(){
@@ -1832,40 +1883,25 @@
 
     function setAppleMusicDevToken(token, opts){
       try {
-        const t = String(token||'').trim();
-        state.appleMusicDevToken = t;
-        const persistToDisk = (typeof opts === 'boolean') ? opts : !!(opts && opts.persist);
-        if (persistToDisk) {
-          try { localStorage.setItem('apple_music_dev_token', t); } catch {}
-          try { sessionStorage.removeItem('apple_music_dev_token'); } catch {}
-        } else {
-          try { sessionStorage.setItem('apple_music_dev_token', t); } catch {}
-        }
+        state.appleMusicDevToken = '';
+        try { localStorage.removeItem('apple_music_dev_token'); } catch {}
+        try { sessionStorage.removeItem('apple_music_dev_token'); } catch {}
         return true;
       } catch { return false; }
     }
 
     function setAppleMusicUserToken(token, opts){
       try {
-        const t = String(token||'').trim();
-        state.appleMusicUserToken = t;
-        const persistToDisk = (typeof opts === 'boolean') ? opts : !!(opts && opts.persist);
-
-        if (persistToDisk) {
-          try { localStorage.setItem('apple_music_user_token', t); } catch {}
-          try { sessionStorage.removeItem('apple_music_user_token'); } catch {}
-        } else {
-          try { sessionStorage.setItem('apple_music_user_token', t); } catch {}
-        }
+        state.appleMusicUserToken = '';
+        try { localStorage.removeItem('apple_music_user_token'); } catch {}
+        try { sessionStorage.removeItem('apple_music_user_token'); } catch {}
         return true;
       } catch { return false; }
     }
     function setAppleMusicTokens(tokens, opts){
       try {
-        const t = tokens && typeof tokens === 'object' ? tokens : {};
-        const persistToDisk = (typeof opts === 'boolean') ? opts : !!(opts && opts.persist);
-        if (t.devToken !== undefined) setAppleMusicDevToken(t.devToken, { persist: persistToDisk });
-        if (t.userToken !== undefined) setAppleMusicUserToken(t.userToken, { persist: persistToDisk });
+        setAppleMusicDevToken('', { persist:true });
+        setAppleMusicUserToken('', { persist:true });
         return true;
       } catch { return false; }
     }
@@ -3117,16 +3153,7 @@
         const sid = String(songId||'').trim();
         if (!sid) return null;
         const url = appleMusicAmpUrl(`https://amp-api.music.apple.com/v1/catalog/${encodeURIComponent(sf)}/songs/${encodeURIComponent(sid)}/lyrics`);
-        const headers = {};
-        try {
-          const token = String(getAppleMusicDevToken()||'').trim();
-          if (token) headers['Authorization'] = `Bearer ${token}`;
-        } catch {}
-        try {
-          const ut = String(getAppleMusicUserToken()||'').trim();
-          if (ut) headers['Music-User-Token'] = ut;
-        } catch {}
-        if (!headers['Authorization'] || !headers['Music-User-Token']) return null;
+        const headers = { 'Accept': 'application/json' };
         const tryFetch = async ()=>{
           try { return await fetch(url, { headers }).catch(()=>null); } catch { return null; }
         };
@@ -3209,9 +3236,6 @@
         if (!t) return false;
         const hasMeta = !!(String(t.title||'').trim() && String(t.artist||'').trim());
         if (!hasMeta) return false;
-        const dev = String(getAppleMusicDevToken()||'').trim();
-        const ut = String(getAppleMusicUserToken()||'').trim();
-        if (!dev || !ut) return false;
         if (isNullOrigin() && !getAppleMusicProxyBaseUrlCandidates().length) return false;
         return true;
       } catch { return false; }
@@ -3381,7 +3405,7 @@
           if (sid) {
             let found = null;
             try {
-              try { musDbgLyrics('[Lyrics]', 'amp-lyrics:try', { key, sf, sid, nullOrigin: isNullOrigin(), proxy: String(getAppleMusicProxyBaseUrl()||'').trim() ? '(set)' : '(empty)' }); } catch {}
+              try { musDbgLyrics('[Lyrics]', 'amp-lyrics:try', { key, sf, sid, nullOrigin: isNullOrigin(), proxy: String(getAppleMusicProxyBaseUrlActiveSync()||'').trim() ? '(set)' : '(auto)' }); } catch {}
               const lyr = await fetchAppleLyricsViaAmpApi(sf, sid, { lyricsLocale: preferredLyricsLocale().lyrics });
               if (lyr && lyr.raw) found = { ...lyr, source: 'apple' };
               try { musDbgLyrics('[Lyrics]', 'amp-lyrics:done', { key, ok: !!(lyr && lyr.raw), kind: lyr?.kind, bytes: lyr?.raw ? String(lyr.raw).length : 0 }); } catch {}
@@ -4506,7 +4530,8 @@
       try {
         const c = String(code||'').trim().toLowerCase();
         if (!c) return;
-        if (c === 'eruda') { try { toggleEruda(); } catch {} return; }
+        if (c === 'eruda_debug') { try { toggleEruda(); } catch {} return; }
+        if (c === 'dis_copy') { try { openDistributeWizard(); } catch {} return; }
         if (c === 'test_animated_artwork') { try { doorTestAnimatedArtwork(); } catch {} return; }
         if (c === 'clocked_event') { try { doorClockedEvent(); } catch {} return; }
         if (c === 'test_spatialize') { try { doorTestSpatialize(); } catch {} return; }
@@ -13185,9 +13210,7 @@ void main(){
         }
       } catch {}
       try {
-        const ext = (file.name.split('.').pop()||'').toLowerCase();
-        const hint = (ext === 'aac') ? 'aac' : 'm4a';
-        return await decodeFileWithFfmpegToWavUrl(file, { extHint: hint });
+        return await decodeWithBackendToWavUrl(file);
       } catch {
         return null;
       }
@@ -14611,12 +14634,104 @@ void main(){
       } catch {}
     }
 
+    let __hoverPreviewA = null;
+    let __hoverPreviewB = null;
+    let __hoverPreviewActive = null;
+    let __hoverPreviewFadeRaf = 0;
+    let __hoverPreviewStopTimer = 0;
+    let __hoverPreviewToken = 0;
+    let __hoverPreviewGestureOk = false;
+    let __hoverPreviewGestureHooked = false;
+
+    function __hookHoverPreviewGesture(){
+      try {
+        if (__hoverPreviewGestureHooked) return;
+        __hoverPreviewGestureHooked = true;
+        const handler = ()=>{
+          try { __hoverPreviewGestureOk = true; } catch {}
+          try { document.removeEventListener('pointerdown', handler, true); } catch {}
+          try { document.removeEventListener('touchstart', handler, true); } catch {}
+          try { document.removeEventListener('keydown', handler, true); } catch {}
+        };
+        try { document.addEventListener('pointerdown', handler, { capture:true, once:true }); } catch { try { document.addEventListener('pointerdown', handler, true); } catch {} }
+        try { document.addEventListener('touchstart', handler, { capture:true, once:true, passive:true }); } catch { try { document.addEventListener('touchstart', handler, true); } catch {} }
+        try { document.addEventListener('keydown', handler, { capture:true, once:true }); } catch { try { document.addEventListener('keydown', handler, true); } catch {} }
+      } catch {}
+    }
+
+    function __ensureHoverPreviewPlayers(){
+      try {
+        if (__hoverPreviewA && __hoverPreviewB) return;
+        __hoverPreviewA = new Audio();
+
+        __hoverPreviewB = new Audio();
+        [__hoverPreviewA, __hoverPreviewB].forEach(a=>{
+          try { a.preload = 'none'; } catch {}
+          try { a.loop = true; } catch {}
+          try { a.volume = 0; } catch {}
+          try { a.crossOrigin = 'anonymous'; } catch {}
+        });
+      } catch {}
+    }
+
+    function __hoverPreviewAllowed(){
+      try {
+        if (String(state.libraryMode||'local').toLowerCase() !== 'cloud') return false;
+        if (!__hoverPreviewGestureOk) { try { __hookHoverPreviewGesture(); } catch {} return false; }
+        if (anyAudioPlaying && anyAudioPlaying()) return false;
+        return true;
+      } catch { return false; }
+    }
+
+    async function __startHoverPreview(track, cardEl){
+      if (!__hoverPreviewAllowed()) return;
+      try {
+        if (__hoverPreviewStopTimer) { clearTimeout(__hoverPreviewStopTimer); __hoverPreviewStopTimer = 0; }
+      } catch {}
+      __ensureHoverPreviewPlayers();
+      const token = (++__hoverPreviewToken);
+      const url = await __ensureApplePreviewUrlForTrack(track);
+      try {
+        if (token !== __hoverPreviewToken) return;
+        if (cardEl && cardEl.matches && !cardEl.matches(':hover')) return;
+      } catch {}
+      if (!url) return;
+
+      const next = (__hoverPreviewActive === __hoverPreviewA) ? __hoverPreviewB : __hoverPreviewA;
+      try {
+        if (next.src !== url) {
+          try { next.pause(); } catch {}
+          try { next.src = url; } catch {}
+        }
+        try { next.currentTime = 0; } catch {}
+        try { next.loop = true; } catch {}
+        try { next.volume = 0; } catch {}
+        try { await next.play(); } catch {}
+      } catch {}
+
+      try { __fadeHoverPreview(__hoverPreviewActive, next, 0.65, 420); } catch {}
+      __hoverPreviewActive = next;
+    }
+
+    function __stopHoverPreviewSoon(){
+      try {
+        if (__hoverPreviewStopTimer) clearTimeout(__hoverPreviewStopTimer);
+        __hoverPreviewStopTimer = setTimeout(()=>{
+          __hoverPreviewStopTimer = 0;
+          try { __fadeHoverPreview(__hoverPreviewActive, null, 0, 260); } catch {}
+          __hoverPreviewActive = null;
+        }, 120);
+      } catch {}
+    }
+
     function createCard(track, index) {
       const card = cE('div', { className:'card' });
       updateTrackMetaTooltip(track);
       const cover = cE('div', { className:'cover' });
+
       const cov = track.appleCoverUrl || track.coverUrl;
       if (cov) cover.style.backgroundImage = `url('${cov}')`;
+
       try {
         cover.addEventListener('mouseenter', ()=>{
           try {
@@ -14651,6 +14766,10 @@ void main(){
             try { v.pause(); } catch {}
           } catch {}
         });
+      } catch {}
+      try {
+        card.addEventListener('mouseenter', ()=>{ __startHoverPreview(track, card).catch(()=>{}); });
+        card.addEventListener('mouseleave', ()=>{ try { __stopHoverPreviewSoon(); } catch {} });
       } catch {}
       const meta = cE('div', { className:'meta' });
       const title = cE('div', { className:'title', textContent: track.title || track.file?.name || 'Unknown' });
@@ -16333,10 +16452,12 @@ void main(){
     }
     async function restoreLastFolderOnStartup(){
       try { if (!state.persistFolderEnabled) return; } catch {}
+      try { if (String(state.libraryMode||'local').toLowerCase()==='cloud') return; } catch {}
       try { if (state.tracks.length>0) return; } catch {}
       let metaMap = null;
       try { metaMap = await loadFolderMetaMapFromCache(); } catch { metaMap = null; }
       if (!('showDirectoryPicker' in window)) return;
+
       try {
         const handle = await idbGet('lastFolderHandle');
         if (!handle) return;
@@ -16670,8 +16791,11 @@ void main(){
       ui.insertClose.addEventListener('click', ()=> ui.insertOverlay.classList.remove('show'));
       ui.pickFiles.addEventListener('click', ()=> ui.fileInput.click());
       ui.pickFolder.addEventListener('click', pickFolder);
-      ui.fileInput.addEventListener('change', (e)=> { ui.insertProgress.textContent = 'Processing…'; addTracks(e.target.files); ui.insertOverlay.classList.remove('show'); ui.fileInput.value=''; });
-      ui.folderInput.addEventListener('change', (e)=> { ui.insertProgress.textContent = 'Processing…'; addTracks(e.target.files); ui.insertOverlay.classList.remove('show'); ui.folderInput.value=''; });
+      ui.fileInput.addEventListener('change', (e)=> { if (String(state.libraryMode||'local').toLowerCase()==='cloud') { try { siteSays('Switch to Local to insert files.'); } catch {} ui.fileInput.value=''; return; } ui.insertProgress.textContent = 'Processing…'; addTracks(e.target.files); ui.insertOverlay.classList.remove('show'); ui.fileInput.value=''; });
+      ui.folderInput.addEventListener('change', (e)=> { if (String(state.libraryMode||'local').toLowerCase()==='cloud') { try { siteSays('Switch to Local to insert folders.'); } catch {} ui.folderInput.value=''; return; } ui.insertProgress.textContent = 'Processing…'; addTracks(e.target.files); ui.insertOverlay.classList.remove('show'); ui.folderInput.value=''; });
+
+      if (ui.libModeToggle) ui.libModeToggle.addEventListener('click', ()=>{ switchLibraryMode(String(state.libraryMode||'local').toLowerCase()==='cloud' ? 'local' : 'cloud'); });
+      try { __updateLibraryModeUI(); } catch {}
 
       ui.settingsBtn.addEventListener('click', ()=> ui.settingsOverlay.classList.add('show'));
       ui.settingsClose.addEventListener('click', ()=> {
@@ -16828,9 +16952,6 @@ void main(){
       if (ui.clock12h) ui.clock12h.addEventListener('change', ()=> { state.clock12h = ui.clock12h.checked; persist(); try { const el = document.getElementById('focusClock'); if (el) el.textContent = formatClock(); } catch {} try { updateIdleHud(); } catch {} });
       if (ui.weatherUnitF) ui.weatherUnitF.addEventListener('change', ()=> { state.weatherUnitF = ui.weatherUnitF.checked; persist(); try { refreshIdleWeatherOnce(); } catch {} });
       if (ui.emailProvider) ui.emailProvider.addEventListener('change', ()=> { state.emailProvider = ui.emailProvider.value || 'gmail'; persist(); });
-      if (ui.appleMusicProxyBaseUrlInput) ui.appleMusicProxyBaseUrlInput.addEventListener('change', ()=> { try { setAppleMusicProxyBaseUrl(ui.appleMusicProxyBaseUrlInput.value||'', { persist:true }); } catch {} try { persist(); } catch {} });
-      if (ui.appleMusicDevTokenInput) ui.appleMusicDevTokenInput.addEventListener('change', ()=> { try { setAppleMusicDevToken(ui.appleMusicDevTokenInput.value||'', { persist:true }); } catch {} try { persist(); } catch {} });
-      if (ui.appleMusicUserTokenInput) ui.appleMusicUserTokenInput.addEventListener('change', ()=> { try { setAppleMusicUserToken(ui.appleMusicUserTokenInput.value||'', { persist:true }); } catch {} try { persist(); } catch {} });
       if (ui.demucsBackendBaseUrlInput) ui.demucsBackendBaseUrlInput.addEventListener('change', ()=> {
         try { setDemucsBackendBaseUrl(ui.demucsBackendBaseUrlInput.value||'', { persist:true }); } catch {}
         try { maybeRequestLocalNetworkAccess(); } catch {}
@@ -18004,7 +18125,8 @@ void main(){
 
     let settingsFileSaveTimer = 0;
     let settingsAutoSaveTimer = 0;
-    function collectSettings(){ return { themeId: state.themeId, design: state.design, shuffle: state.shuffle, loop: state.loop, automix: state.automix, eqEnable: ui.eqEnable.checked, eqPreset: ui.eqPreset?.value, eqAuto: ui.eqAuto?.checked, eqBandsCount: parseInt(ui.eqBandsCount?.value||EQ_BANDS,10), season: state.dynamicSeason, bgPreset: state.bgPreset || 'mesh', spatial: ui.spatialToggle?.checked, fadePlayback: !!state.fadePlayback, speed: state.speed, tempo: state.tempo, pitchPreserve: state.pitchPreserve, perfMode: state.perfMode, jsmediatagsSimp: state.jsmediatagsSimp, persistFolderEnabled: !!state.persistFolderEnabled, openOnLogin: state.openOnLogin, emailProvider: state.emailProvider || 'gmail', titleAnimMode: state.titleAnimMode || 'none', tabTitleTemplate: state.tabTitleTemplate || '', weatherUnitF: state.weatherUnitF, weatherLocation: state.weatherLocation, weatherLat: state.weatherLat, weatherLon: state.weatherLon, weatherCountryCode: state.weatherCountryCode, weatherLastLocationText: state.weatherLastLocationText, weatherGeoAsked: !!state.weatherGeoAsked, clock12h: state.clock12h, cameraBlackout: !!(state.cameraBlackout && state.cameraBlackout.enabled), appleMusicProxyBaseUrl: state.appleMusicProxyBaseUrl || '', demucsBackendBaseUrl: demucsApiBase() || '', codename: state.codename || '' }; }
+    function collectSettings(){ return { themeId: state.themeId, design: state.design, shuffle: state.shuffle, loop: state.loop, automix: state.automix, eqEnable: ui.eqEnable.checked, eqPreset: ui.eqPreset?.value, eqAuto: ui.eqAuto?.checked, eqBandsCount: parseInt(ui.eqBandsCount?.value||EQ_BANDS,10), season: state.dynamicSeason, bgPreset: state.bgPreset || 'mesh', spatial: ui.spatialToggle?.checked, fadePlayback: !!state.fadePlayback, speed: state.speed, tempo: state.tempo, pitchPreserve: state.pitchPreserve, perfMode: state.perfMode, jsmediatagsSimp: state.jsmediatagsSimp, persistFolderEnabled: !!state.persistFolderEnabled, openOnLogin: state.openOnLogin, emailProvider: state.emailProvider || 'gmail', titleAnimMode: state.titleAnimMode || 'none', tabTitleTemplate: state.tabTitleTemplate || '', weatherUnitF: state.weatherUnitF, weatherLocation: state.weatherLocation, weatherLat: state.weatherLat, weatherLon: state.weatherLon, weatherCountryCode: state.weatherCountryCode, weatherLastLocationText: state.weatherLastLocationText, weatherGeoAsked: !!state.weatherGeoAsked, clock12h: state.clock12h, cameraBlackout: !!(state.cameraBlackout && state.cameraBlackout.enabled), demucsBackendBaseUrl: demucsApiBase() || '', codename: state.codename || '', libraryMode: state.libraryMode || 'local' }; }
+
     function persist() {
       const data = collectSettings();
       localStorage.setItem('player_settings', JSON.stringify(data));
@@ -18020,6 +18142,7 @@ void main(){
         settingsAutoSaveTimer = setInterval(()=>{
           try {
             const data = collectSettings();
+            try { data.libraryMode = state.libraryMode || 'local'; } catch {}
             const val = encodeURIComponent(JSON.stringify(data));
             document.cookie = 'musau_settings=' + val + '; path=/; max-age=31536000';
           } catch {}
@@ -18048,6 +18171,12 @@ void main(){
           }
         } catch {}
         const s = JSON.parse(raw||'{}');
+        try {
+          const want = (typeof s.libraryMode === 'string') ? s.libraryMode : 'local';
+          state.libraryMode = (String(want||'local').toLowerCase()==='cloud') ? 'cloud' : 'local';
+          __updateLibraryModeUI();
+          if (state.libraryMode === 'cloud') setTimeout(()=>{ try { switchLibraryMode('cloud'); } catch {} }, 0);
+        } catch {}
         if (s.themeId) ui.themeSelect.value = s.themeId, state.themeId = s.themeId;
         if (s.design) { ui.designSelect.value = s.design==='material'?'material':'glass'; setDesign(ui.designSelect.value); }
         if (s.shuffle) { state.shuffle = true; ui.shuffleBtn?.classList.toggle('active', true); }
@@ -18095,12 +18224,6 @@ void main(){
         if (typeof s.weatherGeoAsked==='boolean') state.weatherGeoAsked = s.weatherGeoAsked;
         if (typeof s.emailProvider==='string') { state.emailProvider = s.emailProvider; const ep = d('#emailProvider'); if (ep) ep.value = s.emailProvider; }
         if (typeof s.tabTitleTemplate==='string') { state.tabTitleTemplate = s.tabTitleTemplate; const tt=d('#tabTitleTemplate'); if (tt) tt.value = s.tabTitleTemplate; }
-        if (typeof s.appleMusicProxyBaseUrl==='string') { state.appleMusicProxyBaseUrl = s.appleMusicProxyBaseUrl; }
-        try { if (ui.appleMusicProxyBaseUrlInput) ui.appleMusicProxyBaseUrlInput.value = String(state.appleMusicProxyBaseUrl||''); } catch {}
-        try { state.appleMusicDevToken = String(getAppleMusicDevToken()||'').trim(); } catch {}
-        try { if (ui.appleMusicDevTokenInput) ui.appleMusicDevTokenInput.value = String(state.appleMusicDevToken||''); } catch {}
-        try { state.appleMusicUserToken = String(getAppleMusicUserToken()||'').trim(); } catch {}
-        try { if (ui.appleMusicUserTokenInput) ui.appleMusicUserTokenInput.value = String(state.appleMusicUserToken||''); } catch {}
         try {
           if (typeof s.demucsBackendBaseUrl==='string') {
             setDemucsBackendBaseUrl(s.demucsBackendBaseUrl, { persist:true });
