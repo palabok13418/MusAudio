@@ -49,6 +49,26 @@ const ASSETS = [
     out: 'public/vendor/ffmpeg/ffmpeg.min.js',
   },
   {
+    url: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/umd/ffmpeg-core.js',
+    out: 'public/vendor/ffmpeg/core-mt/ffmpeg-core.js',
+  },
+  {
+    url: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/umd/ffmpeg-core.wasm',
+    out: 'public/vendor/ffmpeg/core-mt/ffmpeg-core.wasm',
+  },
+  {
+    url: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/umd/ffmpeg-core.worker.js',
+    out: 'public/vendor/ffmpeg/core-mt/ffmpeg-core.worker.js',
+  },
+  {
+    url: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+    out: 'public/vendor/ffmpeg/core/ffmpeg-core.js',
+  },
+  {
+    url: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm',
+    out: 'public/vendor/ffmpeg/core/ffmpeg-core.wasm',
+  },
+  {
     url: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js',
     out: 'public/vendor/ffmpeg/ffmpeg.0.11.6.min.js',
   },

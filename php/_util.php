@@ -52,6 +52,7 @@ function mus_allowed_apple_target($u) {
     $scheme = isset($p['scheme']) ? strtolower(strval($p['scheme'])) : '';
     if ($scheme !== 'https' && $scheme !== 'http') return false;
     $host = isset($p['host']) ? strtolower(strval($p['host'])) : '';
+    if ($host === 'itunes.apple.com') return true;
     if ($host === 'amp-api.music.apple.com') return true;
     if (mus_ends_with($host, '.music.apple.com')) return true;
     if (mus_ends_with($host, '.mzstatic.com')) return true;

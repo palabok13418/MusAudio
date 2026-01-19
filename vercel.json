@@ -10,6 +10,8 @@
     { "source": "/decode", "destination": "/api/decode" },
     { "source": "/probe", "destination": "/api/probe" },
     { "source": "/analyze", "destination": "/api/analyze" },
+    { "source": "/syllable-lyrics", "destination": "/api/syllable-lyrics" },
+    { "source": "/gif", "destination": "/api/gif" },
     { "source": "/pwa-icon-192.png", "destination": "/api/pwa-icon?size=192" },
     { "source": "/pwa-icon-512.png", "destination": "/api/pwa-icon?size=512" },
     { "source": "/demucs/files/:path*", "destination": "/api/demucs/files?path=:path*" },

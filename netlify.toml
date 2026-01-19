@@ -37,6 +37,16 @@
   status = 200
 
 [[redirects]]
+  from = "/syllable-lyrics"
+  to = "/.netlify/functions/syllable-lyrics"
+  status = 200
+
+[[redirects]]
+  from = "/gif"
+  to = "/.netlify/functions/gif"
+  status = 200
+
+[[redirects]]
   from = "/"
   to = "/index.html"
   status = 200

@@ -1,0 +1,14 @@
+{
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs22.x"
+    }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/api/health" },
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/:site", "destination": "/api/:site" },
+    { "source": "/:site/", "destination": "/api/:site" },
+    { "source": "/:site/:path*", "destination": "/api/:site/:path*" }
+  ]
+}

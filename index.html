@@ -1613,9 +1613,16 @@
 
     async function __loadCloudLibraryFromManifest(){
       try {
-        const res = await fetch('/cloud/library.json', { cache:'no-store' }).catch(()=>null);
-        if (!res || !res.ok) return false;
-        const json = await res.json().catch(()=>null);
+        const urls = ['/cloud/library.json', '/public/cloud/library.json'];
+        let json = null;
+        for (let i=0;i<urls.length;i++) {
+          const u = urls[i];
+          const res = await fetch(u, { cache:'no-store' }).catch(()=>null);
+          if (!res || !res.ok) continue;
+          json = await res.json().catch(()=>null);
+          if (json) break;
+        }
+        if (!json) return false;
         const arr = Array.isArray(json) ? json : (Array.isArray(json && json.tracks) ? json.tracks : []);
         if (!arr || !arr.length) return false;
 
@@ -1625,6 +1632,7 @@
             const u = String(it && (it.url || it.path || it.href) || '').trim();
             if (!u) continue;
             const title = String(it.title||it.name||'').trim() || String((u.split('/').pop()||'')).replace(/\.[^.]+$/,'');
+            const coverUrl = String(it && it.coverUrl || '').trim();
             out.push({
               file: null,
               url: u,
@@ -1632,7 +1640,7 @@
               artist: String(it.artist||'').trim(),
               album: String(it.album||'').trim(),
               weblink: String(it.weblink||it.appleMusicUrl||'').trim(),
-              coverUrl: '',
+              coverUrl: coverUrl,
               status: 'Cloud',
               fp: String(it.id||('cloud::'+u)),
               lyrics: (typeof it.lyrics === 'string') ? it.lyrics : '',
@@ -1642,6 +1650,7 @@
             });
           } catch {}
         }
+
         if (!out.length) return false;
 
         state.tracks = out;
@@ -4535,10 +4544,256 @@
         if (c === 'test_animated_artwork') { try { doorTestAnimatedArtwork(); } catch {} return; }
         if (c === 'clocked_event') { try { doorClockedEvent(); } catch {} return; }
         if (c === 'test_spatialize') { try { doorTestSpatialize(); } catch {} return; }
+        if (c === 'beauty_cam') { try { doorBeautyCam(); } catch {} return; }
+        if (c === 'clean_screen') { try { doorCleanScreen(); } catch {} return; }
         if (c === 'chat_bot_ass') { try { doorChatBotAss(); } catch {} return; }
+        if (c === 'flac-convert') { try { doorFlacConvert(); } catch {} return; }
         if (c === 'converter') { try { doorConverter(); } catch {} return; }
         if (c === 'datapack') { try { doorDatapack(); } catch {} return; }
         try { siteSays('Unknown CodeName: '+c); } catch {}
+      } catch {}
+    }
+
+    const __FLAC_API_BASE_DEFAULT = 'https://musaudio-api-cdn-1.vercel.app';
+    function __flacApiBaseSync(){
+      try {
+        const raw = String(localStorage.getItem('flac_api_base_url') || '').trim();
+        const base = raw || __FLAC_API_BASE_DEFAULT;
+        return String(base || '').trim().replace(/\/+$/, '');
+      } catch { return __FLAC_API_BASE_DEFAULT; }
+    }
+    function __flacSleep(ms){ return new Promise((r)=> setTimeout(r, Math.max(0, Number(ms)||0))); }
+    function __flacDownloadBlob(blob, fileName){
+      try {
+        const b = (blob instanceof Blob) ? blob : new Blob([blob]);
+        const url = URL.createObjectURL(b);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = String(fileName || 'flac-convert.zip');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>{ try { URL.revokeObjectURL(url); } catch {} }, 8000);
+        return true;
+      } catch { return false; }
+    }
+    async function __flacWriteBlobToFolder(dirHandle, blob, fileName, mime){
+      try {
+        if (!dirHandle) return false;
+        if (!(await verifyWritePermission(dirHandle))) return false;
+        const fh = await dirHandle.getFileHandle(String(fileName || 'flac-convert.zip'), { create: true });
+        const w = await fh.createWritable();
+        await w.write(new Blob([blob], { type: mime || (blob && blob.type) || 'application/octet-stream' }));
+        await w.close();
+        return true;
+      } catch { return false; }
+    }
+    async function __flacPickFiles(){
+      return await new Promise((resolve)=>{
+        try {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.multiple = true;
+          input.accept = 'audio/*';
+          input.onchange = ()=>{
+            try {
+              const files = Array.from(input.files || []).filter(f => !/\.flac$/i.test(String(f?.name||'')));
+              resolve(files);
+            } catch { resolve([]); }
+          };
+          input.click();
+        } catch { resolve([]); }
+      });
+    }
+    async function __flacConvertJob(files, opts=null){
+      const base = __flacApiBaseSync();
+      const list = Array.isArray(files) ? files.filter(Boolean) : [];
+      if (!list.length) return false;
+
+      const options = (opts && typeof opts==='object') ? opts : { channels: 'keep', sampleRate: 0, compression: 0 };
+
+      try { await siteSays('FLAC: creating job…'); } catch {}
+      const createRes = await fetch(`${base}/flac-convert/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: list.map(f => ({ name: f.name || 'audio', type: f.type || 'application/octet-stream', size: f.size || 0 })), options })
+      }).catch(()=>null);
+      if (!createRes || !createRes.ok) { try { siteSays('FLAC: job create failed'); } catch {} return false; }
+      const createJson = await createRes.json().catch(()=>null);
+      const jobId = String(createJson?.jobId || '').trim();
+      const uploads = Array.isArray(createJson?.uploads) ? createJson.uploads : [];
+      if (!jobId || !uploads.length) { try { siteSays('FLAC: invalid job'); } catch {} return false; }
+
+      try { await siteSays('FLAC: uploading…'); } catch {}
+      for (const u of uploads) {
+        const idx = Number(u?.idx);
+        const f = list[idx];
+        if (!f) continue;
+        const url = String(u?.url || '').trim();
+        if (!url) continue;
+        const headers = (u && u.headers && typeof u.headers === 'object') ? u.headers : {};
+        const ok = await fetch(url, { method: 'PUT', headers, body: f }).then(r=> !!(r && r.ok)).catch(()=>false);
+        if (!ok) { try { siteSays('FLAC: upload failed'); } catch {} return false; }
+      }
+
+      await fetch(`${base}/flac-convert/commit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId }) }).catch(()=>null);
+
+      let job = null;
+      const started = Date.now();
+      while (true) {
+        if ((Date.now() - started) > 30 * 60 * 1000) { try { siteSays('FLAC: timed out'); } catch {} return false; }
+        const st = await fetch(`${base}/flac-convert/status?jobId=${encodeURIComponent(jobId)}`, { method: 'GET' }).catch(()=>null);
+        if (st && st.ok) {
+          const j = await st.json().catch(()=>null);
+          job = j && j.job ? j.job : null;
+          const s = String(job?.status || '').trim();
+          if (s === 'done') break;
+          if (s === 'error') { try { siteSays('FLAC: error'); } catch {} return false; }
+        }
+        await __flacSleep(1500);
+      }
+
+      const rj = await fetch(`${base}/flac-convert/result?mode=json&jobId=${encodeURIComponent(jobId)}`, { method: 'GET' })
+        .then(r => (r && r.ok) ? r.json() : null)
+        .catch(()=>null);
+      const dlUrl = String(rj?.url || '').trim();
+      const outName = String(rj?.result?.fileName || (list.length === 1 ? 'converted.flac' : 'flac-convert.zip')).trim();
+      const outType = String(rj?.result?.contentType || '').trim();
+      if (!dlUrl) { try { siteSays('FLAC: result missing'); } catch {} return false; }
+
+      const wantFolder = state.lastFolderHandle;
+      if (wantFolder) {
+        const blob = await fetch(dlUrl).then(r => (r && r.ok) ? r.blob() : null).catch(()=>null);
+        if (blob) {
+          const ok = await __flacWriteBlobToFolder(wantFolder, blob, outName, outType);
+          if (ok) { try { siteSays('FLAC: saved to folder'); } catch {} return true; }
+        }
+      }
+
+      try { window.location.href = dlUrl; return true; } catch {}
+      const blob = await fetch(dlUrl).then(r => (r && r.ok) ? r.blob() : null).catch(()=>null);
+      if (blob) __flacDownloadBlob(blob, outName);
+      return true;
+    }
+
+    function doorFlacConvert(){
+      __flacPickFiles().then((files)=>{
+        try { if (files && files.length) __flacConvertJob(files); } catch {}
+      });
+    }
+
+    function doorBeautyCam(){
+      try {
+        const close = '</scr'+'ipt>';
+        const sw = (typeof screen!=='undefined' && screen && screen.width) ? screen.width : 1200;
+        const sh = (typeof screen!=='undefined' && screen && screen.height) ? screen.height : 800;
+        const w = (function(){
+          try {
+            const W = Math.max(280, Math.min(2400, Number(sw)||1200));
+            const H = Math.max(220, Math.min(1600, Number(sh)||800));
+            const feats = `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,fullscreen=yes,width=${W},height=${H},left=0,top=0`;
+            return window.open('', 'Beauty_Cam', feats);
+          } catch { return null; }
+        })();
+        if (!w) { try { siteSays('Popup was blocked.'); } catch {} return; }
+
+        const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Beauty Cam</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;transform:scaleX(-1);-webkit-transform:scaleX(-1)}
+</style></head><body>
+<video id="v" autoplay playsinline muted></video>
+<script>(function(){
+  const v=document.getElementById('v');
+  let stream=null;
+  async function start(){
+    try {
+      const gum = (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia==='function') ? navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices) : null;
+      if (!gum) return;
+      const tryStart = async (video) => {
+        try {
+          stream = await gum({ video, audio: false });
+          v.srcObject = stream;
+          try { await v.play(); } catch {}
+          return true;
+        } catch { return false; }
+      };
+      if (await tryStart({ facingMode: 'user', width: { ideal: 3840 }, height: { ideal: 2160 } })) return;
+      if (await tryStart({ facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } })) return;
+      await tryStart({ facingMode: 'user' });
+    } catch {}
+  }
+  function stop(){
+    try { if (stream) stream.getTracks().forEach(t=>{ try{t.stop();}catch{} }); } catch {}
+    stream=null;
+  }
+  window.addEventListener('beforeunload', stop);
+  start();
+})();${close}</scr`+`ipt>
+</body></html>`;
+
+        doorWritePopup(w, html);
+        try { w.focus(); } catch {}
+      } catch {}
+    }
+
+    function doorCleanScreen(){
+      try {
+        const close = '</scr'+'ipt>';
+        const sw = (typeof screen!=='undefined' && screen && screen.width) ? screen.width : 1200;
+        const sh = (typeof screen!=='undefined' && screen && screen.height) ? screen.height : 800;
+        const w = (function(){
+          try {
+            const W = Math.max(240, Math.min(3200, Number(sw)||1200));
+            const H = Math.max(240, Math.min(2000, Number(sh)||800));
+            const feats = `popup=yes,toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,fullscreen=yes,width=${W},height=${H},left=0,top=0`;
+            return window.open('', 'Clean_Screen', feats);
+          } catch { return null; }
+        })();
+        if (!w) { try { siteSays('Popup was blocked.'); } catch {} return; }
+
+        const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Clean Screen</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;user-select:none}
+body{display:flex;align-items:center;justify-content:center}
+*{cursor:none}
+</style></head><body tabindex="0" aria-label="Clean screen">
+<script>(function(){
+  let unlocking=false;
+  function reqFs(){
+    try {
+      const el = document.documentElement;
+      if (el && el.requestFullscreen) return el.requestFullscreen();
+    } catch {}
+    return null;
+  }
+  function exit(){
+    try { unlocking=true; } catch {}
+    try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); } catch {}
+    setTimeout(()=>{ try { window.close(); } catch {} }, 60);
+  }
+  function onKey(e){
+    try {
+      if (e && e.ctrlKey && e.altKey && (e.key==='p' || e.key==='P')) { e.preventDefault(); e.stopPropagation(); exit(); return; }
+    } catch {}
+  }
+  document.addEventListener('keydown', onKey, true);
+  document.addEventListener('contextmenu', (e)=>{ try { e.preventDefault(); } catch {} }, true);
+  document.addEventListener('fullscreenchange', ()=>{
+    try {
+      if (unlocking) return;
+      if (!document.fullscreenElement) setTimeout(()=>{ try { reqFs(); } catch {} }, 30);
+    } catch {}
+  });
+  try {
+    window.focus();
+    setTimeout(()=>{ try { reqFs(); } catch {} }, 0);
+  } catch {}
+})();${close}
+</body></html>`;
+
+        doorWritePopup(w, html);
+        try { w.focus(); } catch {}
       } catch {}
     }
 

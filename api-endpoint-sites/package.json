@@ -1,0 +1,19 @@
+{
+  "name": "musaudio-api-endpoint-sites",
+  "private": true,
+  "version": "0.0.0",
+  "description": "MusAudio — API Endpoint Sites (Vercel, server-only)",
+  "license": "UNLICENSED",
+  "packageManager": "npm@10.0.0",
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.896.0",
+    "@aws-sdk/s3-request-presigner": "^3.896.0",
+    "archiver": "^7.0.1",
+    "busboy": "^1.6.0",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.3"
+  }
+}

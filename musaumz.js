@@ -714,10 +714,15 @@ async function __ensureFfmpegReady() {
       return __ffmpegShared && __ffmpegShared.loaded ? __ffmpegShared : null;
     }
 
-    const ok = await __loadExtScript(
-      'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
-      () => !!(window.FFmpegWASM && typeof window.FFmpegWASM.FFmpeg === 'function')
-    );
+    const ok =
+      (await __loadExtScript(
+        './vendor/ffmpeg/ffmpeg.min.js',
+        () => !!(window.FFmpegWASM && typeof window.FFmpegWASM.FFmpeg === 'function')
+      )) ||
+      (await __loadExtScript(
+        'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.min.js',
+        () => !!(window.FFmpegWASM && typeof window.FFmpegWASM.FFmpeg === 'function')
+      ));
     if (!ok) return null;
 
     const inst = new window.FFmpegWASM.FFmpeg();
@@ -726,6 +731,16 @@ async function __ensureFfmpegReady() {
       try {
         const wantMt = !!(typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
         if (wantMt) {
+          try {
+            const baseLocal = './vendor/ffmpeg/core-mt';
+            const baseCdn = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/umd';
+            await inst.load({
+              coreURL: `${baseLocal}/ffmpeg-core.js`,
+              wasmURL: `${baseLocal}/ffmpeg-core.wasm`,
+              workerURL: `${baseLocal}/ffmpeg-core.worker.js`,
+            });
+            return;
+          } catch {}
           try {
             const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/umd';
             await inst.load({
@@ -736,6 +751,14 @@ async function __ensureFfmpegReady() {
             return;
           } catch {}
         }
+        try {
+          const baseLocal = './vendor/ffmpeg/core';
+          await inst.load({
+            coreURL: `${baseLocal}/ffmpeg-core.js`,
+            wasmURL: `${baseLocal}/ffmpeg-core.wasm`,
+          });
+          return;
+        } catch {}
         const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
         await inst.load({
           coreURL: `${base}/ffmpeg-core.js`,
