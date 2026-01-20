@@ -1594,6 +1594,7 @@
       distEmailProvider: d('#distEmailProvider'),
     };
 
+    const __CLOUD_LIBRARY_DISABLED = true;
     const __librarySnapshots = { local: null, cloud: null };
 
     function __snapshotLibraryState(){
@@ -1639,6 +1640,7 @@
 
     async function __loadCloudLibraryFromManifest(){
       try {
+        if (__CLOUD_LIBRARY_DISABLED) return false;
         const urls = ['/cloud/library.json', '/public/cloud/library.json'];
         let json = null;
         for (let i=0;i<urls.length;i++) {
@@ -1702,6 +1704,12 @@
       try {
         const next = String(mode||'').toLowerCase() === 'cloud' ? 'cloud' : 'local';
         const cur = String(state.libraryMode||'local').toLowerCase() === 'cloud' ? 'cloud' : 'local';
+        if (__CLOUD_LIBRARY_DISABLED && next === 'cloud') {
+          try { siteSays('Cloud library disabled until further notice.'); } catch {}
+          state.libraryMode = 'local';
+          __updateLibraryModeUI();
+          return;
+        }
         if (cur === next) {
           __updateLibraryModeUI();
           try {
@@ -17369,7 +17377,13 @@ void main(){
       ui.fileInput.addEventListener('change', (e)=> { if (String(state.libraryMode||'local').toLowerCase()==='cloud') { try { siteSays('Switch to Local to insert files.'); } catch {} ui.fileInput.value=''; return; } ui.insertProgress.textContent = 'Processing…'; addTracks(e.target.files); ui.insertOverlay.classList.remove('show'); ui.fileInput.value=''; });
       ui.folderInput.addEventListener('change', (e)=> { if (String(state.libraryMode||'local').toLowerCase()==='cloud') { try { siteSays('Switch to Local to insert folders.'); } catch {} ui.folderInput.value=''; return; } ui.insertProgress.textContent = 'Processing…'; addTracks(e.target.files); ui.insertOverlay.classList.remove('show'); ui.folderInput.value=''; });
 
-      if (ui.libModeToggle) ui.libModeToggle.addEventListener('click', ()=>{ switchLibraryMode(String(state.libraryMode||'local').toLowerCase()==='cloud' ? 'local' : 'cloud'); });
+      if (ui.libModeToggle) {
+        if (__CLOUD_LIBRARY_DISABLED) {
+          try { ui.libModeToggle.style.display = 'none'; } catch {}
+        } else {
+          ui.libModeToggle.addEventListener('click', ()=>{ switchLibraryMode(String(state.libraryMode||'local').toLowerCase()==='cloud' ? 'local' : 'cloud'); });
+        }
+      }
       try { __updateLibraryModeUI(); } catch {}
 
       ui.settingsBtn.addEventListener('click', ()=> ui.settingsOverlay.classList.add('show'));
@@ -18748,9 +18762,9 @@ void main(){
         const s = JSON.parse(raw||'{}');
         try {
           const want = (typeof s.libraryMode === 'string') ? s.libraryMode : 'local';
-          state.libraryMode = (String(want||'local').toLowerCase()==='cloud') ? 'cloud' : 'local';
+          state.libraryMode = __CLOUD_LIBRARY_DISABLED ? 'local' : ((String(want||'local').toLowerCase()==='cloud') ? 'cloud' : 'local');
           __updateLibraryModeUI();
-          if (state.libraryMode === 'cloud') setTimeout(()=>{ try { switchLibraryMode('cloud'); } catch {} }, 0);
+          if (!__CLOUD_LIBRARY_DISABLED && state.libraryMode === 'cloud') setTimeout(()=>{ try { switchLibraryMode('cloud'); } catch {} }, 0);
         } catch {}
         if (s.themeId) ui.themeSelect.value = s.themeId, state.themeId = s.themeId;
         if (s.design) { ui.designSelect.value = s.design==='material'?'material':'glass'; setDesign(ui.designSelect.value); }

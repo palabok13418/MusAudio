@@ -3,6 +3,11 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseFile } from 'music-metadata';
 
+if (String(process.env.MUSAUDIO_ENABLE_CLOUD_LIBRARY_GEN || '').trim() !== '1') {
+  console.log('[cloud-library-gen] Disabled until further notice. Set MUSAUDIO_ENABLE_CLOUD_LIBRARY_GEN=1 to enable.');
+  process.exit(0);
+}
+
 const ROOT = process.cwd();
 
 const PUBLIC_DIR = path.join(ROOT, 'public');
