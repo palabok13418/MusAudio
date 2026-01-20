@@ -64,6 +64,7 @@
   <script src="./vendor/mp3tag/mp3tag.min.js" vite-ignore onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mp3tag.js@3.14.0/dist/mp3tag.min.js'"></script>
   <script src="./vendor/jquery/jquery-3.7.1.min.js" vite-ignore onerror="this.onerror=null;this.integrity='sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=';this.crossOrigin='anonymous';this.src='https://code.jquery.com/jquery-3.7.1.min.js'"></script>
   <script src="./vendor/howler/howler.min.js" vite-ignore onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js'"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <!-- Aurora.js core (for ALAC/M4A decoding) -->
   <script src="./vendor/aurora/aurora.min.js" vite-ignore onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/aurora.js/0.4.2/aurora.min.js'"></script>
   <!-- Audiocogs decoders for Aurora.js -->
@@ -867,8 +868,28 @@
     </div>
   </div>
 
-  <input id="fileInput" type="file" accept="audio/*" multiple hidden />
-  <input id="folderInput" type="file" webkitdirectory directory accept="audio/*" hidden />
+  <div id="connectHostOverlay" class="overlay">
+    <div class="surface sheet">
+      <div class="body">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <h3 style="margin:0">Connect Host</h3>
+          <button id="connectHostClose" class="btn ghost"><span class="icon">close</span></button>
+        </div>
+        <div style="display:grid; gap:12px; margin-top:10px;">
+          <div class="muted">Room</div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <div class="badge" id="connectHostCodeText">—</div>
+            <button id="connectHostCopy" class="btn"><span class="icon">content_copy</span>Copy</button>
+          </div>
+          <div class="muted">Members</div>
+          <div id="connectHostPeersList" class="list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input id="fileInput" type="file" accept="audio/*,.sing" multiple hidden />
+  <input id="folderInput" type="file" webkitdirectory directory accept="audio/*,.sing" hidden />
   <audio id="audioA" crossorigin="anonymous"></audio>
   <audio id="audioB" crossorigin="anonymous"></audio>
 
@@ -1465,7 +1486,12 @@
       codenameSave: d('#codenameSave'),
       codenameCancel: d('#codenameCancel'),
 
-      // Tag Editor
+      connectHostOverlay: d('#connectHostOverlay'),
+      connectHostClose: d('#connectHostClose'),
+      connectHostCodeText: d('#connectHostCodeText'),
+      connectHostCopy: d('#connectHostCopy'),
+      connectHostPeersList: d('#connectHostPeersList'),
+
       tagEditorOverlay: d('#tagEditorOverlay'),
       tagClose: d('#tagClose'),
       tagTitle: d('#tagTitle'),
@@ -2701,7 +2727,6 @@
             words,
             translatedLyric: '',
             romanLyric: '',
-            startTime,
             endTime,
             isBG: false,
             isDuet: false,
@@ -2711,16 +2736,55 @@
       } catch { return []; }
     }
 
-    let __amllPlayer = null;
-    let __amllPlayerKey = '';
-    let __amllLastTickAt = 0;
-    async function ensureAmlLoaded(timeoutMs=12000){
+    let __singJszipPromise = null;
+    function __singLoadScriptOnce(src){
+      return new Promise((resolve)=>{
+        try {
+          const s = document.createElement('script');
+          s.async = true;
+          s.src = src;
+          s.onload = ()=> resolve(true);
+          s.onerror = ()=> resolve(false);
+          document.head.appendChild(s);
+        } catch { resolve(false); }
+      });
+    }
+    async function ensureJsZip(timeoutMs=15000){
       try {
-        if (typeof window === 'undefined' || !window) return null;
-        if (window.__AMLL) return window.__AMLL;
+        if (window.JSZip) return window.JSZip;
+        if (!__singJszipPromise) {
+          __singJszipPromise = (async ()=>{
+            try {
+              const urls = [
+                new URL('./vendor/jszip/jszip.min.js', location.href).toString(),
+                'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+              ];
+              for (const u of urls) {
+                if (window.JSZip) break;
+                const ok = await __singLoadScriptOnce(u);
+                if (ok && window.JSZip) break;
+              }
+              return window.JSZip || null;
+            } catch { return null; }
+          })();
+        }
+        const started = Date.now();
+        while (true) {
+          const z = await __singJszipPromise.catch(()=>null);
+          if (z) return z;
+          if ((Date.now() - started) > timeoutMs) break;
+          await new Promise(r=> setTimeout(r, 50));
+        }
+      } catch {}
+      return null;
+    }
+
+    async function ensureAmlLoaded(timeoutMs=15000){
+      try {
+        if (typeof window.__AMLL !== 'undefined') return window.__AMLL;
         const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         while (true) {
-          if (window.__AMLL) return window.__AMLL;
+          if (typeof window.__AMLL !== 'undefined') return window.__AMLL;
           const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
           if ((now - t0) > timeoutMs) break;
           await new Promise(r=> setTimeout(r, 50));
@@ -2728,6 +2792,10 @@
       } catch {}
       return null;
     }
+
+    let __amllPlayer = null;
+    let __amllPlayerKey = '';
+    let __amllLastTickAt = 0;
     function disposeAmlPlayer(){
       try { if (__amllPlayer && typeof __amllPlayer.dispose === 'function') __amllPlayer.dispose(); } catch {}
       __amllPlayer = null;
@@ -4550,7 +4618,258 @@
         if (c === 'flac-convert') { try { doorFlacConvert(); } catch {} return; }
         if (c === 'converter') { try { doorConverter(); } catch {} return; }
         if (c === 'datapack') { try { doorDatapack(); } catch {} return; }
+        if (c === 'create_room') { try { doorCreateRoom(); } catch {} return; }
         try { siteSays('Unknown CodeName: '+c); } catch {}
+      } catch {}
+    }
+
+    const connectHost = {
+      code: '',
+      peer: null,
+      conns: new Map(),
+      names: new Map(),
+      calls: new Map(),
+      outDest: null,
+      outStream: null,
+      uiBound: false,
+      timer: 0,
+      lastIdx: -1,
+    };
+
+    function ensureConnectRoomCode(){
+      try {
+        if (!connectHost.code) {
+          const n = Math.floor(Math.random() * 100000);
+          const code = String(n).padStart(5, '0');
+          connectHost.code = 'mus-' + code;
+        }
+        return connectHost.code;
+      } catch { return ''; }
+    }
+
+    function rebuildConnectPeersList(){
+      try {
+        if (!ui.connectHostPeersList) return;
+        ui.connectHostPeersList.innerHTML = '';
+        const peers = Array.from(connectHost.conns.keys());
+        if (!peers.length) {
+          const empty = document.createElement('div');
+          empty.className = 'muted';
+          empty.textContent = 'No members yet';
+          ui.connectHostPeersList.appendChild(empty);
+          return;
+        }
+        for (const id of peers) {
+          const row = document.createElement('div');
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.justifyContent = 'space-between';
+          row.style.gap = '10px';
+          row.style.padding = '8px 10px';
+          row.style.border = '1px solid var(--border)';
+          row.style.borderRadius = '12px';
+          row.style.background = 'rgba(15,23,42,.5)';
+          const left = document.createElement('div');
+          left.style.minWidth = '0';
+          const name = String(connectHost.names.get(id) || '').trim() || id;
+          const t = document.createElement('div');
+          t.textContent = name;
+          t.style.whiteSpace = 'nowrap';
+          t.style.overflow = 'hidden';
+          t.style.textOverflow = 'ellipsis';
+          const sub = document.createElement('div');
+          sub.className = 'muted';
+          sub.textContent = id;
+          sub.style.fontSize = '11px';
+          left.append(t, sub);
+          const badge = document.createElement('div');
+          badge.className = 'badge';
+          badge.textContent = 'connected';
+          row.append(left, badge);
+          ui.connectHostPeersList.appendChild(row);
+        }
+      } catch {}
+    }
+
+    function updateConnectHostUI(){
+      try {
+        const code = ensureConnectRoomCode();
+        if (ui.connectHostCodeText) ui.connectHostCodeText.textContent = code || '—';
+        rebuildConnectPeersList();
+      } catch {}
+    }
+
+    function ensureConnectHostUi(){
+      try {
+        if (connectHost.uiBound) return;
+        connectHost.uiBound = true;
+        if (ui.connectHostClose) ui.connectHostClose.addEventListener('click', ()=>{ closeConnectHost(); });
+        if (ui.connectHostOverlay) ui.connectHostOverlay.addEventListener('click', (e)=>{
+          try { if (e && e.target === ui.connectHostOverlay) closeConnectHost(); } catch {}
+        });
+        if (ui.connectHostCopy) ui.connectHostCopy.addEventListener('click', async ()=>{
+          try {
+            const code = ensureConnectRoomCode();
+            if (!code) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(code);
+              return;
+            }
+          } catch {}
+          try {
+            const code = ensureConnectRoomCode();
+            window.prompt('Copy room code:', code);
+          } catch {}
+        });
+      } catch {}
+    }
+
+    function openConnectHost(){
+      try {
+        ensureConnectHostUi();
+        ensureConnectRoomCode();
+        if (ui.connectHostOverlay) ui.connectHostOverlay.classList.add('show');
+        updateConnectHostUI();
+        startConnectPeerHost();
+      } catch {}
+    }
+
+    function closeConnectHost(){
+      try { if (ui.connectHostOverlay) ui.connectHostOverlay.classList.remove('show'); } catch {}
+      try { stopConnectPeerHost(); } catch {}
+    }
+
+    function doorCreateRoom(){
+      try { openConnectHost(); } catch {}
+    }
+
+    function ensureConnectOutput(){
+      try {
+        ensureAudio();
+        if (!audioCtx || !masterGain) return null;
+        if (!connectHost.outDest) {
+          connectHost.outDest = audioCtx.createMediaStreamDestination();
+          try { masterGain.connect(connectHost.outDest); } catch {}
+          connectHost.outStream = connectHost.outDest.stream;
+        }
+        return connectHost.outStream;
+      } catch { return null; }
+    }
+
+    function buildConnectLibraryList(){
+      try {
+        const items = [];
+        const arr = Array.isArray(state.tracks) ? state.tracks : [];
+        for (let i=0;i<arr.length;i++) {
+          const t = arr[i];
+          const cover = String(t?.appleCoverRemoteUrl || t?.coverDataUrl || '').trim();
+          items.push({ idx: i, title: String(t?.title || t?.file?.name || '').trim(), artist: String(t?.artist || '').trim(), cover });
+        }
+        return items;
+      } catch { return []; }
+    }
+
+    function sendConnectLibraryTo(conn){
+      try { if (conn && conn.open) conn.send({ t:'lib', items: buildConnectLibraryList() }); } catch {}
+    }
+
+    function sendConnectNowPlayingTo(conn){
+      try {
+        if (!conn || !conn.open) return;
+        const idx = Number(state.current);
+        const t = (Array.isArray(state.tracks) && idx >= 0) ? state.tracks[idx] : null;
+        const cover = String(t?.appleCoverRemoteUrl || t?.coverDataUrl || '').trim();
+        conn.send({ t:'np', idx: isFinite(idx) ? idx : -1, title: String(t?.title || t?.file?.name || '').trim(), artist: String(t?.artist || '').trim(), cover });
+      } catch {}
+    }
+
+    function buildConnectHostState(){
+      try {
+        const el = currentAudio();
+        const idx = Number(state.current);
+        const pos = Number(el?.currentTime || 0);
+        const dur = Number(el?.duration || 0);
+        const paused = !!el?.paused;
+        return { t:'st', idx: isFinite(idx) ? idx : -1, pos: isFinite(pos) ? pos : 0, dur: isFinite(dur) ? dur : 0, paused };
+      } catch { return { t:'st', idx: -1, pos: 0, dur: 0, paused: true }; }
+    }
+
+    function sendConnectStateTo(conn){
+      try { if (conn && conn.open) conn.send(buildConnectHostState()); } catch {}
+    }
+
+    function applyConnectCtl(m, conn){
+      try {
+        const a = (m && m.a) ? String(m.a) : '';
+        ensureAudio();
+        const el = currentAudio();
+        if (a === 'play') { play(); return; }
+        if (a === 'pause') { pause(); return; }
+        if (a === 'next') { next(); return; }
+        if (a === 'prev') { prev(); return; }
+        if (a === 'seekBy') { const v = parseFloat(m.v) || 0; try { el.currentTime = Math.max(0, Math.min((el.duration || Infinity), (el.currentTime || 0) + v)); } catch {} try { if (typeof updateMediaSessionPositionState === 'function') updateMediaSessionPositionState(false); } catch {} return; }
+        if (a === 'seekTo') { const v = parseFloat(m.v); if (isFinite(v)) { try { el.currentTime = Math.max(0, Math.min((el.duration || Infinity), v)); } catch {} try { if (typeof updateMediaSessionPositionState === 'function') updateMediaSessionPositionState(false); } catch {} } return; }
+        if (a === 'stop') { pause(); try { el.currentTime = 0; } catch {} try { if (typeof updateMediaSessionPositionState === 'function') updateMediaSessionPositionState(false); } catch {} return; }
+        if (a === 'playTrack') { const idx = parseInt(m.idx, 10); if (isFinite(idx)) { try { loadTrack(idx, { autoPlay:true }); } catch {} } return; }
+        if (a === 'sync') { if (conn) { sendConnectNowPlayingTo(conn); sendConnectLibraryTo(conn); sendConnectStateTo(conn); } return; }
+      } catch {}
+    }
+
+    function startConnectBroadcastLoop(){
+      try {
+        if (connectHost.timer) return;
+        connectHost.lastIdx = -1;
+        connectHost.timer = setInterval(()=>{
+          try {
+            if (!connectHost.peer) return;
+            const idx = Number(state.current);
+            if (isFinite(idx) && idx !== connectHost.lastIdx) {
+              connectHost.lastIdx = idx;
+              for (const c of connectHost.conns.values()) sendConnectNowPlayingTo(c);
+            }
+            for (const c of connectHost.conns.values()) sendConnectStateTo(c);
+          } catch {}
+        }, 1000);
+      } catch {}
+    }
+
+    function stopConnectPeerHost(){
+      try { if (connectHost.timer) clearInterval(connectHost.timer); } catch {}
+      connectHost.timer = 0;
+      try { for (const call of connectHost.calls.values()) { try { call.close(); } catch {} } } catch {}
+      try { connectHost.calls.clear(); } catch {}
+      try { for (const conn of connectHost.conns.values()) { try { conn.close(); } catch {} } } catch {}
+      try { connectHost.conns.clear(); } catch {}
+      try { connectHost.names.clear(); } catch {}
+      try { if (connectHost.peer) { try { connectHost.peer.destroy(); } catch {} } } catch {}
+      connectHost.peer = null;
+      try { rebuildConnectPeersList(); } catch {}
+    }
+
+    function startConnectPeerHost(){
+      try {
+        if (connectHost.peer) return;
+        if (!window.Peer) return;
+        const code = ensureConnectRoomCode();
+        if (!code) return;
+        connectHost.peer = new Peer(code, {});
+        connectHost.peer.on('open', ()=>{ try { updateConnectHostUI(); } catch {} });
+        connectHost.peer.on('connection', (conn)=>{
+          try {
+            if (!conn) return;
+            connectHost.conns.set(conn.peer, conn);
+            conn.on('close', ()=>{ try { connectHost.conns.delete(conn.peer); connectHost.names.delete(conn.peer); rebuildConnectPeersList(); } catch {} });
+            conn.on('error', ()=>{ try { connectHost.conns.delete(conn.peer); connectHost.names.delete(conn.peer); rebuildConnectPeersList(); } catch {} });
+            conn.on('data', (msg)=>{ try { if (!msg || typeof msg !== 'object') return; if (msg.t === 'hello' && msg.name) { connectHost.names.set(conn.peer, String(msg.name)); rebuildConnectPeersList(); } if (msg.t === 'ctl') applyConnectCtl(msg, conn); } catch {} });
+            const stream = ensureConnectOutput();
+            try { if (stream && connectHost.peer) { const call = connectHost.peer.call(conn.peer, stream); if (call) { connectHost.calls.set(conn.peer, call); call.on('close', ()=>{ try { connectHost.calls.delete(conn.peer); } catch {} }); call.on('error', ()=>{ try { connectHost.calls.delete(conn.peer); } catch {} }); } } } catch {}
+            try { sendConnectNowPlayingTo(conn); } catch {}
+            try { sendConnectLibraryTo(conn); } catch {}
+            try { sendConnectStateTo(conn); } catch {}
+            rebuildConnectPeersList();
+          } catch {}
+        });
+        try { startConnectBroadcastLoop(); } catch {}
       } catch {}
     }
 
@@ -4577,6 +4896,7 @@
         return true;
       } catch { return false; }
     }
+
     async function __flacWriteBlobToFolder(dirHandle, blob, fileName, mime){
       try {
         if (!dirHandle) return false;
@@ -16036,7 +16356,7 @@ void main(){
         }
         track.__metaFromCache = true;
       } catch {} };
-      const audioFiles = [...files].filter(f=> /\.(mp3|wav|ogg|opus|m4a|mp4|flac|aac)$/i.test(f.name));
+      const audioFiles = [...files].filter(f=> /\.(mp3|wav|ogg|opus|m4a|mp4|flac|aac|sing)$/i.test(f.name));
       const newFiles = audioFiles.filter(f=> !state.knownFiles.has(fileFingerprint(f)));
       if (!newFiles.length) {
         if (!opts.silent && ui.processor) {
@@ -16119,7 +16439,7 @@ void main(){
         const run = async ()=> {
           const skipTagScan = !!track.__metaFromCache;
           const lazyTags = jsmediatagsSimpMode();
-          if (ext==='mp3' || ext==='m4a' || ext==='mp4' || ext==='aac' || ext==='flac' || ext==='ogg' || ext==='opus' || ext==='wav') {
+          if (ext==='mp3' || ext==='m4a' || ext==='mp4' || ext==='aac' || ext==='flac' || ext==='ogg' || ext==='opus' || ext==='wav' || ext==='sing') {
             if (!lazyTags && !window.jsmediatags && ext==='mp3' && !skipTagScan) {
               try { console.error('[LRC] Cannot inspect tags for', debugName, '- jsmediatags library not available'); } catch {}
             }
@@ -16174,7 +16494,7 @@ void main(){
               try { track.__jsTagsDone = true; } catch {}
             }
             if (!lazyTags && !track.hasLrc && !skipTagScan) {
-              const miOk = (ext==='mp3' || ext==='flac' || ext==='m4a' || ext==='mp4' || ext==='aac' || ext==='ogg' || ext==='opus' || ext==='wav');
+              const miOk = (ext==='mp3' || ext==='flac' || ext==='m4a' || ext==='mp4' || ext==='aac' || ext==='ogg' || ext==='opus' || ext==='wav' || ext==='sing');
               if (miOk) { try { await probeLrcWithMediaInfo(track, file, debugName, ext); } catch {} }
             }
           }
@@ -16437,7 +16757,7 @@ void main(){
       });
     }
     async function updateDocPipGradient(){ if (!docPipWin || !docPipEls) return; try { const t = state.tracks[state.current]; const cov = t?.appleCoverUrl || t?.coverUrl; if (!cov) return; const grad = await createPipGradientFromImage(cov, docPipWin.document); if (docPipEls.grad) docPipEls.grad.style.background = grad; } catch {} }
-    function playSong(){ try { ensureAudio(); const p = currentAudio().play(); if (p && typeof p.catch==='function') p.catch(()=>{}); } catch {} }
+    function playSong(){ try { ensureAudio(); const a=currentAudio(); a.paused? playSong() : pauseSong(); } catch {} }
     function pauseSong(){ try { currentAudio().pause(); } catch {} }
     async function openDocPip(){
       if (!supportsDocPip()) { return; }
@@ -16528,7 +16848,7 @@ void main(){
     async function verifyReadPermission(handle){ try { let p = await handle.queryPermission?.({mode:'read'}); if (p==='granted') return true; if (p==='prompt') { p = await handle.requestPermission?.({mode:'read'}); return p==='granted'; } return false; } catch { return false; } }
     async function verifyWritePermission(handle){ try { let p = await handle.queryPermission?.({mode:'readwrite'}); if (p==='granted') return true; if (p==='prompt') { p = await handle.requestPermission?.({mode:'readwrite'}); return p==='granted'; } return false; } catch { return false; } }
     async function* walkDir(dirHandle){ for await (const [name, entry] of dirHandle.entries()) { if (entry.kind==='file') { yield entry; } else if (entry.kind==='directory') { yield* walkDir(entry); } } }
-    async function collectAudioFilesFromHandle(dirHandle){ const files=[]; try { for await (const fh of walkDir(dirHandle)) { try { const f = await fh.getFile(); if (/\.(mp3|wav|ogg|opus|m4a|flac|aac)$/i.test(f.name)) { try { f.__handle = fh; } catch {} files.push(f); } } catch {} } } catch {} return files; }
+    async function collectAudioFilesFromHandle(dirHandle){ const files=[]; try { for await (const fh of walkDir(dirHandle)) { try { const f = await fh.getFile(); if (/\.(mp3|wav|ogg|opus|m4a|flac|aac|sing)$/i.test(f.name)) { try { f.__handle = fh; } catch {} files.push(f); } } catch {} } } catch {} return files; }
 
     // Fingerprint a file to detect new additions (name + size + mtime)
     function fileFingerprint(file){ try { return `${file.name}::${file.size}::${file.lastModified||0}`; } catch { return `${file.name}::${file.size}`; } }

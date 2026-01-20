@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="application-name" content="MusAudio Connect" />
+  <meta name="theme-color" content="#0b0f17" />
+  <title>MusAudio Connect</title>
+  <link rel="icon" type="image/x-icon" href="./favicon/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./favicon/apple-touch-icon.png" />
+  <link id="materialSymbolsCss" rel="stylesheet" href="./vendor/material-symbols/material-symbols-outlined.css" vite-ignore>
+  <script>
+    (function(){
+      try {
+        const el = document.getElementById('materialSymbolsCss');
+        if (!el) return;
+        el.addEventListener('error', () => {
+          try { el.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined'; } catch {}
+        }, { once: true });
+      } catch {}
+    })();
+  </script>
+  <style>
+    :root{--bg:#0b0f17;--surface:#121826;--surface2:#0f1421;--text:#e6e9ef;--muted:#96a0af;--border:rgba(255,255,255,.12);--accent:#7c3aed;}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:radial-gradient(900px 600px at 20% 0%, #20304f 0%, transparent 60%),radial-gradient(900px 600px at 100% 10%, #2c1a4a 0%, transparent 70%),linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);color:var(--text)}
+    .app{max-width:1100px;margin:0 auto;padding:20px;display:grid;gap:14px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .title{display:grid;gap:2px}
+    .title h1{margin:0;font-size:18px;letter-spacing:.2px}
+    .muted{color:var(--muted);font-size:12px}
+    .surface{background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.14));border:1px solid var(--border);border-radius:16px;padding:14px}
+    .grid{display:grid;grid-template-columns:380px 1fr;gap:14px;align-items:start}
+    @media (max-width: 920px){.grid{grid-template-columns:1fr}}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;border:1px solid var(--border);color:var(--text);background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.12));cursor:pointer;user-select:none}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{border-color:color-mix(in oklab, var(--accent) 60%, transparent);background:linear-gradient(180deg, color-mix(in oklab, var(--accent) 18%, transparent), color-mix(in oklab, var(--accent) 6%, transparent))}
+    .btn.ghost{background:transparent}
+    .btn[disabled]{opacity:.55;pointer-events:none}
+    .icon{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:20px;line-height:1;vertical-align:middle;display:inline-flex;align-items:center;justify-content:center}
+    input{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:10px 10px;outline:none}
+    input:focus{border-color:rgba(255,255,255,.22)}
+    .field{display:grid;gap:6px;min-width:160px;flex:1}
+    .field label{font-size:12px;color:var(--muted)}
+    .kv{display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:13px}
+    .kv .k{color:var(--muted)}
+    .np{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:center}
+    .cover{width:56px;height:56px;border-radius:14px;background:rgba(0,0,0,.2) center/cover no-repeat;border:1px solid rgba(255,255,255,.10)}
+    .np .name{font-weight:650;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .np .artist{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .list{display:grid;gap:8px;max-height:420px;overflow:auto;padding:2px}
+    .item{display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:center;padding:8px;border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);cursor:pointer;user-select:none}
+    .item:hover{background:rgba(255,255,255,.06)}
+    .item .t{font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .item .a{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.12);font-size:12px;color:var(--muted)}
+    audio{width:100%}
+  </style>
+</head>
+<body>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <div class="app">
+    <header>
+      <div class="title">
+        <h1>MusAudio Connect</h1>
+        <div class="muted">Join a room and play the host audio stream. Use Sync to request host playback state.</div>
+      </div>
+      <div class="badge" id="statusBadge">Disconnected</div>
+    </header>
+
+    <div class="grid">
+      <section class="surface">
+        <div class="row" style="justify-content:space-between">
+          <div style="font-weight:700">Join</div>
+          <button id="disconnectBtn" class="btn ghost" type="button" disabled><span class="icon">link_off</span>Disconnect</button>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <div class="field">
+            <label for="codeInput">Room code</label>
+            <input id="codeInput" type="text" placeholder="mus-12345" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="nameInput">Name</label>
+            <input id="nameInput" type="text" placeholder="Your name" autocomplete="off" />
+          </div>
+          <button id="joinBtn" class="btn primary" type="button"><span class="icon">link</span>Join</button>
+        </div>
+
+        <div style="margin-top:12px" class="kv">
+          <div class="k">Your id</div><div id="peerId">—</div>
+          <div class="k">Host</div><div id="hostId">—</div>
+          <div class="k">Stream</div><div id="streamState">—</div>
+        </div>
+
+        <div style="margin-top:12px" class="row">
+          <button id="syncBtn" class="btn" type="button" disabled><span class="icon">sync</span>Sync</button>
+          <button id="playBtn" class="btn" type="button" disabled><span class="icon">play_arrow</span>Play</button>
+          <button id="pauseBtn" class="btn" type="button" disabled><span class="icon">pause</span>Pause</button>
+          <button id="prevBtn" class="btn" type="button" disabled><span class="icon">skip_previous</span>Prev</button>
+          <button id="nextBtn" class="btn" type="button" disabled><span class="icon">skip_next</span>Next</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <audio id="streamAudio" controls autoplay playsinline></audio>
+        </div>
+
+        <div style="margin-top:12px" class="surface" style="padding:12px">
+          <div class="muted" style="margin-bottom:8px">Now playing</div>
+          <div class="np">
+            <div id="npCover" class="cover"></div>
+            <div style="min-width:0">
+              <div id="npTitle" class="name">—</div>
+              <div id="npArtist" class="artist">—</div>
+              <div id="npState" class="muted" style="margin-top:2px">—</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="surface">
+        <div class="row" style="justify-content:space-between">
+          <div style="font-weight:700">Library</div>
+          <div class="muted" id="libMeta">0 tracks</div>
+        </div>
+        <div id="library" class="list" style="margin-top:12px"></div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="./connect.js"></script>
+</body>
+</html>

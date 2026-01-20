@@ -9,18 +9,14 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const CLOUD_DIR = path.join(PUBLIC_DIR, 'cloud');
 const CLOUD_COVERS_DIR = path.join(CLOUD_DIR, 'covers');
 const AUDIO_PUBLIC_DIR = path.join(PUBLIC_DIR, 'audio');
-const AUDIO_FALLBACK_DIR = path.join(ROOT, 'audio');
-const AUDIO_SRC_DIR = AUDIO_FALLBACK_DIR;
 const MANIFEST_PATH = path.join(CLOUD_DIR, 'library.json');
+
+const AUDIO_SUBDIRS = ['mp3', 'm4a', 'flac'];
 
 const AUDIO_EXTS = new Set([
   '.mp3',
   '.m4a',
-  '.wav',
   '.flac',
-  '.ogg',
-  '.webm',
-  '.aac',
 ]);
 
 function posixify(p) {
@@ -197,15 +193,20 @@ async function mapPool(items, concurrency, fn) {
 }
 
 async function generateManifest() {
-  const absPublic = await walkFilesIfExists(AUDIO_PUBLIC_DIR);
-  const absFallback = absPublic.length ? [] : await walkFilesIfExists(AUDIO_FALLBACK_DIR);
-  const absFiles = absPublic.length ? absPublic : absFallback;
+  const absFiles = [];
+  for (const sub of AUDIO_SUBDIRS) {
+    try {
+      const dir = path.join(AUDIO_PUBLIC_DIR, sub);
+      absFiles.push(...(await walkFilesIfExists(dir)));
+    } catch {}
+  }
 
-  const usingFallback = !absPublic.length && absFallback.length;
-  const effectiveAudioRoot = absPublic.length ? AUDIO_PUBLIC_DIR : AUDIO_FALLBACK_DIR;
+  await ensureDir(CLOUD_DIR);
+  await ensureDir(CLOUD_COVERS_DIR);
 
   if (!absFiles.length) {
-    console.log('[cloud-library-gen] public/audio folder not found or empty; skipping manifest generation');
+    await fs.writeFile(MANIFEST_PATH, '[]\n', 'utf8');
+    console.log('[cloud-library-gen] public/audio/{mp3,m4a,flac} empty; wrote empty manifest');
     return { count: 0 };
   }
 
@@ -220,13 +221,6 @@ async function generateManifest() {
   const parseConc = Math.max(1, parseInt(String(process.env.MUSAUDIO_CLOUD_PARSE_CONC || '4'), 10) || 4);
   const enrichConc = Math.max(1, parseInt(String(process.env.MUSAUDIO_CLOUD_ENRICH_CONC || '2'), 10) || 2);
 
-  await ensureDir(CLOUD_DIR);
-  await ensureDir(CLOUD_COVERS_DIR);
-
-  if (usingFallback) {
-    console.log('[cloud-library-gen] public/audio not found; falling back to audio/');
-  }
-
   const wantedAbs = absFiles.filter((abs) => {
     const ext = path.extname(abs).toLowerCase();
     return AUDIO_EXTS.has(ext);
@@ -237,7 +231,7 @@ async function generateManifest() {
 
   const parsed = await mapPool(wantedAbs, parseConc, async (abs) => {
     try {
-      const relFromAudio = path.relative(effectiveAudioRoot, abs);
+      const relFromAudio = path.relative(AUDIO_PUBLIC_DIR, abs);
       const relPosix = posixify(relFromAudio);
       const base = path.basename(abs, path.extname(abs));
       const fromName = parseTitleArtistFromFilename(base);
@@ -398,49 +392,7 @@ async function generateManifest() {
   return { count: tracks.length };
 }
 
-async function syncAudioToPublic() {
-  const mode = String(process.env.MUSAUDIO_CLOUD_COPY_AUDIO || 'auto').trim().toLowerCase();
-  if (mode === '0' || mode === 'false' || mode === 'no') {
-    console.log('[cloud-library-gen] Skipping public/audio sync (MUSAUDIO_CLOUD_COPY_AUDIO=0)');
-    return false;
-  }
-
-  const lifecycle = String(process.env.npm_lifecycle_event || '').trim().toLowerCase();
-  const forceCopy = !!(process.env.CI || process.env.NETLIFY || process.env.VERCEL || lifecycle.includes('build'));
-
-  const exists = await fs
-    .stat(AUDIO_SRC_DIR)
-    .then((s) => s.isDirectory())
-    .catch(() => false);
-
-  if (!exists) return false;
-
-  if (mode === 'auto') {
-    const already = await fs
-      .stat(AUDIO_PUBLIC_DIR)
-      .then((s) => s.isDirectory())
-      .catch(() => false);
-    if (already && !forceCopy) {
-      console.log('[cloud-library-gen] public/audio exists; skipping audio sync (auto mode)');
-      return true;
-    }
-  }
-
-  await ensureDir(PUBLIC_DIR);
-  await ensureDir(AUDIO_PUBLIC_DIR);
-
-  await fs.cp(AUDIO_SRC_DIR, AUDIO_PUBLIC_DIR, {
-    recursive: true,
-    force: true,
-    errorOnExist: false,
-  });
-
-  console.log(`[cloud-library-gen] Synced audio/ -> ${posixify(path.relative(ROOT, AUDIO_PUBLIC_DIR))}`);
-  return true;
-}
-
 async function main() {
-  await syncAudioToPublic();
   await generateManifest();
 }
 
