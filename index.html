@@ -2688,21 +2688,11 @@
           const it = arr[i];
           const t0s = Number(it?.t);
           if (!isFinite(t0s)) continue;
-          const startTime = Math.max(0, Math.round(t0s*1000));
+          const fallbackStart = Math.max(0, Math.round(t0s * 1000));
+          const lineStartSeconds = Number.isFinite(Number(it?.t)) ? Number(it.t) : 0;
 
-          let endTime = NaN;
-          try {
-            const tEnd = Number(it?.tEnd);
-            if (isFinite(tEnd)) endTime = Math.round(tEnd*1000);
-          } catch {}
-          if (!isFinite(endTime)) {
-            try {
-              const next = arr[i+1];
-              const tNext = Number(next?.t);
-              if (isFinite(tNext) && tNext > t0s) endTime = Math.round(tNext*1000);
-            } catch {}
-          }
-          if (!isFinite(endTime) || endTime <= startTime) endTime = startTime + 2000;
+          let declaredEnd = Number(it?.tEnd);
+          if (!isFinite(declaredEnd) || declaredEnd <= lineStartSeconds) declaredEnd = NaN;
 
           const words = [];
           const segs = (it && Array.isArray(it.segments) && it.segments.length) ? it.segments : null;
@@ -2712,34 +2702,57 @@
                 const s0 = segs[k];
                 const ts = Number(s0?.t);
                 if (!isFinite(ts)) continue;
+                const rawText = String(s0?.text ?? '');
+                if (!rawText) continue;
+
                 let te = Number(s0?.end);
-                if (!isFinite(te)) {
-                  const tn = (k+1 < segs.length) ? Number(segs[k+1]?.t) : NaN;
-                  te = isFinite(tn) ? tn : (isFinite(it?.tEnd) ? Number(it.tEnd) : NaN);
+                if (!isFinite(te) || te <= ts) {
+                  const next = (k+1 < segs.length) ? Number(segs[k+1]?.t) : NaN;
+                  if (isFinite(next) && next > ts) te = next;
+                  else if (isFinite(declaredEnd) && declaredEnd > ts) te = declaredEnd;
+                  else te = ts + 0.6;
                 }
-                const w0 = String(s0?.text||'');
-                if (!w0) continue;
-                const wStart = Math.max(0, Math.round(ts*1000));
-                const wEnd = Math.max(wStart, Math.round((isFinite(te) ? te : (ts+0.6))*1000));
-                words.push({ startTime:wStart, endTime:wEnd, word:w0, romanWord:'', obscene:false });
+
+                const wordStart = Math.max(0, Math.round(ts * 1000));
+                const wordEnd = Math.max(wordStart + 1, Math.round(te * 1000));
+                words.push({ startTime:wordStart, endTime:wordEnd, word:rawText, romanWord:'', obscene:false });
               } catch {}
             }
           }
+
           if (!words.length) {
-            const txt = String(it?.text||'');
+            const txt = String(it?.text ?? '');
             if (!txt) continue;
-            words.push({ startTime, endTime, word:txt, romanWord:'', obscene:false });
+            const endSeconds = isFinite(declaredEnd) && declaredEnd > lineStartSeconds
+              ? declaredEnd
+              : lineStartSeconds + 2;
+            words.push({
+              startTime:fallbackStart,
+              endTime:Math.max(fallbackStart + 1, Math.round(endSeconds * 1000)),
+              word:txt,
+              romanWord:'',
+              obscene:false
+            });
           }
+
+          // AMLL requires line-level timestamps as well as per-word timestamps.
+          // Without startTime, the line index/scroll state can drift or select the wrong lyric.
+          const startTime = Math.max(0, Number(words[0]?.startTime ?? fallbackStart));
+          const maxWordEnd = words.reduce((max, word) => Math.max(max, Number(word.endTime) || 0), startTime + 1);
+          let endTime = isFinite(declaredEnd) ? Math.round(declaredEnd * 1000) : maxWordEnd;
+          if (!isFinite(endTime) || endTime <= startTime) endTime = Math.max(maxWordEnd, startTime + 1000);
 
           out.push({
             words,
+            startTime,
+            endTime,
             translatedLyric: '',
             romanLyric: '',
-            endTime,
-            isBG: false,
-            isDuet: false,
+            isBG: !!it?.isBG,
+            isDuet: !!it?.isDuet,
           });
         }
+        out.sort((a,b) => a.startTime - b.startTime);
         return out;
       } catch { return []; }
     }
@@ -2880,112 +2893,250 @@
     }
     function ttmlTimeToSec(s){
       try {
-        const x = String(s||'').trim();
+        const x = String(s ?? '').trim();
         if (!x) return NaN;
-        if (/^[0-9]+(?:\.[0-9]+)?s$/i.test(x)) return parseFloat(x);
-        const m = x.match(/^([0-9]{1,2}):([0-9]{2})(?::([0-9]{2})(?:\.?([0-9]{1,3}))?)?(?:\.?([0-9]{1,3}))?$/);
-        if (m) {
-          let hh = 0, mm = 0, ss = 0, frac = 0;
-          if (m[3] != null) {
-            hh = parseInt(m[1],10)||0;
-            mm = parseInt(m[2],10)||0;
-            ss = parseInt(m[3],10)||0;
-            const f = (m[4]||'').trim();
-            if (f) { const n=parseInt(f,10)||0; frac = (f.length>=3? n/1000 : n/100); }
-          } else {
-            mm = parseInt(m[1],10)||0;
-            ss = parseInt(m[2],10)||0;
-            const f = (m[5]||'').trim();
-            if (f) { const n=parseInt(f,10)||0; frac = (f.length>=3? n/1000 : n/100); }
-          }
-          return hh*3600 + mm*60 + ss + frac;
+
+        // TTML offset-time expressions (unit order matters: ms before m).
+        const offset = x.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+))(ms|h|m|s)$/i);
+        if (offset) {
+          const value = Number(offset[1]);
+          if (!isFinite(value)) return NaN;
+          const unit = offset[2].toLowerCase();
+          if (unit === 'h') return value * 3600;
+          if (unit === 'm') return value * 60;
+          if (unit === 'ms') return value / 1000;
+          return value;
         }
-        const n = parseFloat(x);
-        return isFinite(n) ? n : NaN;
+
+        // TTML clock forms: MM:SS[.fff] and HH:MM:SS[.fff].
+        const clock = x.match(/^(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?$/);
+        if (clock) {
+          const hours = clock[1] == null ? 0 : (parseInt(clock[1],10) || 0);
+          const minutes = parseInt(clock[2],10) || 0;
+          const seconds = parseInt(clock[3],10) || 0;
+          const fraction = clock[4] ? (parseInt(clock[4],10) / Math.pow(10, clock[4].length)) : 0;
+          if (minutes > 59 || seconds > 59) return NaN;
+          return hours * 3600 + minutes * 60 + seconds + fraction;
+        }
+
+        if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(x)) return Number(x);
+        return NaN;
       } catch { return NaN; }
     }
+
     function parseTtmlToLrc(ttml){
       try {
-        const xml = String(ttml||'').trim();
+        const xml = String(ttml ?? '').trim();
         if (!xml) return [];
-        const dp = new DOMParser();
-        const doc = dp.parseFromString(xml, 'text/xml');
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
         if (!doc || !doc.documentElement) return [];
         try {
-          const pe = doc.getElementsByTagName('parsererror');
-          if (pe && pe.length) return [];
+          const errors = doc.getElementsByTagName('parsererror');
+          if (errors && errors.length) return [];
+          if (String(doc.documentElement.localName || '').toLowerCase() === 'parsererror') return [];
         } catch {}
 
-        const out = [];
-        const ps = Array.from(doc.getElementsByTagName('p'));
-        for (const p of ps){
+        const localName = (node) => String(node?.localName || node?.nodeName || '').split(':').pop().toLowerCase();
+        const descendants = (node, name) => {
           try {
-            const begin = p.getAttribute('begin') || p.getAttribute('start') || p.getAttribute('data-begin') || '';
-            const t0 = ttmlTimeToSec(begin);
-            if (!isFinite(t0)) continue;
+            if (node?.getElementsByTagNameNS) return Array.from(node.getElementsByTagNameNS('*', name));
+            return Array.from(node?.getElementsByTagName?.(name) || []);
+          } catch { return []; }
+        };
+        const attr = (node, names) => {
+          try {
+            for (const name of names) {
+              const value = node?.getAttribute?.(name);
+              if (value != null && String(value).trim() !== '') return String(value).trim();
+            }
+            const wanted = new Set(names.map(name => String(name).split(':').pop().toLowerCase()));
+            for (const attribute of Array.from(node?.attributes || [])) {
+              const name = String(attribute?.localName || attribute?.name || '').split(':').pop().toLowerCase();
+              if (wanted.has(name) && String(attribute.value ?? '').trim() !== '') return String(attribute.value).trim();
+            }
+          } catch {}
+          return '';
+        };
+        const roleOf = (node) => attr(node, ['ttm:role','role']).toLowerCase();
+        const roleIsIgnored = (role) => /(^|[-_:])(x-translation|x-roman|translation|roman)([-_:]|$)/i.test(String(role || ''));
+        const rubyRoleOf = (node) => attr(node, ['tts:ruby','ruby']).toLowerCase();
+        const rubyIsReading = (node) => /^(text|textcontainer)$/.test(rubyRoleOf(node));
+        const isBgRole = (role) => /(^|[-_:])x-bg($|[-_:])/i.test(String(role || ''));
 
-            let tEnd = NaN;
-            try {
-              const endAttr = p.getAttribute('end') || p.getAttribute('data-end') || '';
-              const durAttr = p.getAttribute('dur') || p.getAttribute('data-dur') || '';
-              const te0 = ttmlTimeToSec(endAttr);
-              if (isFinite(te0)) tEnd = te0;
-              else {
-                const d0 = ttmlTimeToSec(durAttr);
-                if (isFinite(d0)) tEnd = t0 + d0;
+        // Translation/transliteration and ruby readings are annotations, not lead lyric words.
+        function plainText(node){
+          const parts = [];
+          const walk = (current) => {
+            for (const child of Array.from(current?.childNodes || [])) {
+              if (child.nodeType === 3 || child.nodeType === 4) {
+                parts.push(String(child.nodeValue || ''));
+                continue;
               }
-            } catch {}
+              if (child.nodeType !== 1) continue;
+              if (roleIsIgnored(roleOf(child)) || rubyIsReading(child)) continue;
+              walk(child);
+            }
+          };
+          walk(node);
+          return parts.join('').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+        }
 
-            const segs = [];
-            const spans = Array.from(p.getElementsByTagName('span'));
-            for (const sp of spans){
-              const sb = sp.getAttribute('begin') || sp.getAttribute('start') || '';
-              const ts = ttmlTimeToSec(sb);
-              if (!isFinite(ts)) continue;
-              let te = NaN;
-              try {
-                const se = sp.getAttribute('end') || '';
-                const sd = sp.getAttribute('dur') || '';
-                const te0 = ttmlTimeToSec(se);
-                if (isFinite(te0)) te = te0;
-                else {
-                  const d0 = ttmlTimeToSec(sd);
-                  if (isFinite(d0)) te = ts + d0;
+        const body = descendants(doc, 'body')[0] || null;
+        const paragraphs = body ? descendants(body, 'p') : descendants(doc, 'p');
+        const out = [];
+        let sourceOrder = 0;
+
+        for (const p of paragraphs) {
+          try {
+            const beginRaw = attr(p, ['begin','start','data-begin']);
+            const endRaw = attr(p, ['end','data-end']);
+            const durationRaw = attr(p, ['dur','data-dur']);
+            let pStart = ttmlTimeToSec(beginRaw);
+            let pEnd = ttmlTimeToSec(endRaw);
+            if ((!isFinite(pEnd) || pEnd <= pStart) && isFinite(ttmlTimeToSec(durationRaw)) && isFinite(pStart)) {
+              pEnd = pStart + ttmlTimeToSec(durationRaw);
+            }
+
+            const pRole = roleOf(p);
+            const initialBg = isBgRole(pRole);
+            const mainSegments = [];
+            const bgSegments = [];
+            let hasExplicitSpanTiming = false;
+
+            const addSegment = (isBg, start, end, text) => {
+              const value = String(text ?? '');
+              if (!value || !value.trim()) return;
+              (isBg ? bgSegments : mainSegments).push({
+                t: isFinite(start) ? start : NaN,
+                end: isFinite(end) ? end : NaN,
+                text: value,
+                isBG: !!isBg,
+                order: sourceOrder++,
+              });
+            };
+
+            const visit = (node, inheritedStart, inheritedEnd, inheritedBg, rootNode=false) => {
+              for (const child of Array.from(node?.childNodes || [])) {
+                if (child.nodeType === 3 || child.nodeType === 4) {
+                  // Preserve meaningful inline text but ignore XML pretty-print indentation.
+                  if (rootNode && String(child.nodeValue || '').trim()) {
+                    addSegment(inheritedBg, inheritedStart, inheritedEnd, child.nodeValue);
+                  }
+                  continue;
                 }
-              } catch {}
-              const txt = String(sp.textContent||'');
-              if (!txt) continue;
-              const seg = { t: ts, text: txt };
-              if (isFinite(te)) seg.end = te;
-              segs.push(seg);
-            }
-            segs.sort((a,b)=> a.t - b.t);
+                if (child.nodeType !== 1) continue;
+                const name = localName(child);
+                if (name !== 'span') {
+                  visit(child, inheritedStart, inheritedEnd, inheritedBg, false);
+                  continue;
+                }
 
-            // Fill missing segment end-times from next segment start, otherwise line end.
-            if (segs.length) {
-              for (let i=0;i<segs.length;i++){
-                try {
-                  const s0 = segs[i];
-                  if (!s0 || !isFinite(s0.t)) continue;
-                  if (isFinite(s0.end)) continue;
-                  const tNext = (i+1 < segs.length) ? segs[i+1].t : tEnd;
-                  if (isFinite(tNext) && tNext > s0.t) s0.end = tNext;
-                } catch {}
+                const role = roleOf(child);
+                if (roleIsIgnored(role) || rubyIsReading(child)) continue;
+                const begin = attr(child, ['begin','start','data-begin']);
+                const end = attr(child, ['end','data-end']);
+                const dur = attr(child, ['dur','data-dur']);
+                if (begin || end || dur) hasExplicitSpanTiming = true;
+
+                // Apple lyric TTML timestamps are media-relative, so keep explicit
+                // child timestamps as supplied rather than adding the paragraph offset.
+                const start = begin ? ttmlTimeToSec(begin) : inheritedStart;
+                let finish = end ? ttmlTimeToSec(end) : NaN;
+                if ((!isFinite(finish) || finish <= start) && dur && isFinite(ttmlTimeToSec(dur)) && isFinite(start)) {
+                  finish = start + ttmlTimeToSec(dur);
+                }
+                if (!isFinite(finish) || finish <= start) finish = inheritedEnd;
+                const bg = inheritedBg || isBgRole(role);
+                const nestedSpans = Array.from(child.children || []).filter(element => localName(element) === 'span');
+
+                if (nestedSpans.length) {
+                  // A timed wrapper often contains the actual lyric span plus x-translation
+                  // and x-roman children. Never emit wrapper.textContent or it duplicates
+                  // all descendants into a single, incorrectly timed word.
+                  const directText = Array.from(child.childNodes || [])
+                    .filter(node => node.nodeType === 3 || node.nodeType === 4)
+                    .map(node => String(node.nodeValue || ''))
+                    .join('');
+                  if (directText.trim()) addSegment(bg, start, finish, directText);
+                  visit(child, start, finish, bg, false);
+                } else {
+                  addSegment(bg, start, finish, child.textContent || '');
+                }
               }
+            };
+
+            visit(p, pStart, pEnd, initialBg, true);
+
+            const allSegments = mainSegments.concat(bgSegments);
+            const timedStarts = allSegments.map(segment => segment.t).filter(Number.isFinite);
+            if (!isFinite(pStart) && timedStarts.length) pStart = Math.min(...timedStarts);
+            if (!isFinite(pStart)) continue;
+            if (!isFinite(pEnd) || pEnd <= pStart) {
+              const segmentEnds = allSegments.map(segment => segment.end).filter(value => Number.isFinite(value) && value > pStart);
+              if (segmentEnds.length) pEnd = Math.max(...segmentEnds);
             }
 
-            const textFromSegs = segs.length ? segs.map(s=> String(s.text||'')).join('') : String(p.textContent||'');
-            const text = String(textFromSegs||'').replace(/\s+/g,' ').trim();
-            if (!text) continue;
-            if (segs.length) {
-              const line = { t: t0, text, segments: segs };
-              if (isFinite(tEnd)) line.tEnd = tEnd;
-              out.push(line);
+            // If this is line-timed TTML (no timed spans), make one cue for the
+            // complete line instead of assigning every nested text span the same time.
+            if (!hasExplicitSpanTiming) {
+              const text = plainText(p);
+              if (text) {
+                const lineEnd = isFinite(pEnd) && pEnd > pStart ? pEnd : NaN;
+                out.push({
+                  t: pStart,
+                  tEnd: lineEnd,
+                  text,
+                  segments: [{ t:pStart, end:lineEnd, text }],
+                  isBG: initialBg,
+                  isDuet: false,
+                  order: sourceOrder++,
+                });
+              }
+              continue;
             }
-            else out.push({ t: t0, text });
+
+            const emitGroup = (segments, isBg) => {
+              const clean = segments
+                .map(segment => ({ ...segment }))
+                .filter(segment => String(segment.text || '').trim())
+                .sort((a,b) => (a.t - b.t) || (a.order - b.order));
+
+              if (!clean.length) return;
+              for (let i=0;i<clean.length;i++) {
+                const segment = clean[i];
+                if (!isFinite(segment.t)) segment.t = pStart;
+                if (!isFinite(segment.end) || segment.end <= segment.t) {
+                  const next = clean.slice(i+1).find(item => isFinite(item.t) && item.t > segment.t);
+                  if (next) segment.end = next.t;
+                  else if (isFinite(pEnd) && pEnd > segment.t) segment.end = pEnd;
+                  else segment.end = segment.t + 0.6;
+                }
+              }
+
+              const text = clean.map(segment => String(segment.text || '')).join('')
+                .replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+              if (!text) return;
+              const start = clean.reduce((min, segment) => Math.min(min, segment.t), Infinity);
+              const maxEnd = clean.reduce((max, segment) => Math.max(max, segment.end), start);
+              const lineEnd = isFinite(pEnd) && pEnd > start ? pEnd : (maxEnd > start ? maxEnd : NaN);
+              out.push({
+                t: start,
+                tEnd: lineEnd,
+                text,
+                segments: clean,
+                isBG: !!isBg,
+                isDuet: false,
+                order: clean[0]?.order ?? sourceOrder++,
+              });
+            };
+
+            emitGroup(mainSegments, false);
+            emitGroup(bgSegments, true);
           } catch {}
         }
-        out.sort((a,b)=> a.t - b.t);
+
+        out.sort((a,b) => (a.t - b.t) || ((a.order || 0) - (b.order || 0)));
         return out;
       } catch { return []; }
     }
