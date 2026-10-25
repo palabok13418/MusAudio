@@ -1028,6 +1028,14 @@
         </div>
       </div>
       <div class="form">
+        <label>Advanced</label>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <label class="badge"><input id="spotifyCanvasPipToggle" type="checkbox" style="margin-right:6px"/> Spotify Canvas + Lyrics in PiP</label>
+        </div>
+        <div class="muted">Adds a Canvas-backed lyrics view to the mini player. Canvas videos are retrieved from Canvas for Cider when a track has one.</div>
+      </div>
+
+      <div class="form">
         <label>Others</label>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
           <div class="select"><select id="perfMode">
@@ -1440,6 +1448,7 @@
       appleMusicUserToken: '',
       appleMusicProxyBaseUrl: '',
       fadePlayback: false,
+      spotifyCanvasPip: false,
       cameraBlackout: { enabled:false, calibrated:false },
       codename: '',
     };
@@ -1479,6 +1488,7 @@
       cameraBlackoutToggle: d('#cameraBlackoutToggle'),
       tabTitleTemplate: d('#tabTitleTemplate'),
       fadePlaybackToggle: d('#fadePlaybackToggle'),
+      spotifyCanvasPipToggle: d('#spotifyCanvasPipToggle'),
 
       demucsBackendBaseUrlInput: d('#demucsBackendBaseUrl'),
       codenameOverlay: d('#codenameOverlay'),
@@ -16679,71 +16689,246 @@ void main(){
     
 
     let docPipWin = null; let docPipEls = null;
+    let docPipCanvasLyricsOpen = false;
+    let docPipCanvasCloseTimer = 0;
+    let docPipCanvasAbortController = null;
+    let docPipCanvasRequestKey = '';
+    let docPipCanvasRestoreSize = null;
+    const docPipCanvasCache = new Map();
+    const DOC_PIP_CANVAS_API = 'https://spotify-canvas-for-cider-api.vercel.app/api/resolve-canvas';
+
     function supportsDocPip(){ return 'documentPictureInPicture' in window && typeof documentPictureInPicture.requestWindow === 'function'; }
     function buildDocPip(pw){
-      const doc = pw.document; doc.body.style.margin='0'; doc.body.style.background='#000';
+      const doc = pw.document;
+      doc.body.style.margin = '0';
+      doc.body.style.background = '#000';
+      doc.body.style.overflow = 'hidden';
       const style = doc.createElement('style');
       style.textContent = [
-        "html, body { height:100%; }",
-        "body { background:#000; color:#fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }",
-        ".root { position:relative; width:100%; height:100%; overflow:hidden; }",
-        ".bg { position:absolute; inset:0; background:#000 center/cover no-repeat; }",
-        ".motion { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; }",
-        ".motion.show { display:block; }",
-        ".grad { position:absolute; inset:0; opacity:0; transition: opacity .35s ease; }",
-        ".root.expanded .grad { opacity:1; }",
-        ".root.expanded .bg { filter: blur(10px) brightness(0.55); }",
-        ".pill { position:absolute; top:12px; left:50%; transform: translateX(-50%); min-width:260px; max-width:520px; display:grid; grid-template-columns: 40px 1fr auto; align-items:center; gap:10px; border-radius:16px; border:1px solid rgba(255,255,255,.12); background: rgba(18,24,38,.88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding:8px 10px; box-shadow: 0 10px 26px rgba(0,0,0,.35); cursor:pointer; }",
-        ".pill .pcover { width:40px; height:40px; border-radius:10px; background:#1c2435 center/cover no-repeat; }",
-        ".pill .pmeta { display:grid; gap:2px; }",
-        ".pill .psong { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
-        ".pill .partist { font-size:11px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
-        ".pill .bars { display:flex; gap:4px; align-items:flex-end; height:20px; }",
-        ".pill .bars span { width:4px; height:6px; border-radius:4px; background: rgba(255,255,255,.85); opacity:.9; transition: height .1s linear; }",
-        ".ctrls { position:absolute; left:50%; bottom:14px; transform: translateX(-50%); display:flex; gap:10px; padding:10px 12px; border-radius:14px; background: linear-gradient(180deg, rgba(0,0,0,0.1), rgba(0,0,0,0.5)); border:1px solid rgba(255,255,255,0.12); }",
-        ".btn { display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.4); color:#fff; cursor:pointer; }",
-        ".btn:active { transform: translateY(1px); }",
-        ".panel { position:absolute; inset:0; display:none; place-items:center; padding:12px; }",
-        ".panel .stack { display:grid; gap:10px; justify-items:center; }",
-        ".panel .cover { width:68%; max-width:280px; aspect-ratio:1/1; border-radius:12px; background:#0b0f17 center/cover no-repeat; box-shadow: 0 10px 30px rgba(0,0,0,.5); }",
-        ".panel .title { font-weight:600; text-align:center; text-shadow: 0 1px 2px rgba(0,0,0,.7); }",
-        ".panel .by { font-size:12px; opacity:.9; text-align:center; text-shadow: 0 1px 2px rgba(0,0,0,.7); }",
-        ".root.expanded .panel { display:grid; }",
-        ".root.expanded .panel .cover { width:88%; max-width:364px; }",
-        ".root.expanded .panel .title { font-size: 1.3rem; }",
-        ".root.expanded .panel .by { font-size: 16px; }",
-        ".lyrics { position:absolute; left:50%; top:50%; transform: translate(-50%, -50%); width:92%; text-align:center; font-weight:700; font-size: 18px; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.85); pointer-events:none; display:none; }",
-        ".icon { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-size: 24px; display: inline-block; line-height: 1; -webkit-font-smoothing: antialiased; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }",
+        "html, body { width:100%; height:100%; margin:0; overflow:hidden; }",
+        "body { background:#000; color:#fff; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; }",
+        ".root { position:relative; width:100%; height:100%; overflow:hidden; background:#000; isolation:isolate; }",
+        ".bg { position:absolute; inset:0; z-index:0; background:#000 center/cover no-repeat; transform:scale(1.02); transition:opacity .38s ease,filter .38s ease,transform .55s cubic-bezier(.2,.8,.2,1); }",
+        ".motion, .canvas-video { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:cover; border:0; }",
+        ".motion { display:none; } .motion.show { display:block; }",
+        ".canvas-video { display:none; background:#000; } .root.canvas-mode.has-canvas .canvas-video.show { display:block; }",
+        ".root.canvas-mode.has-canvas .bg, .root.canvas-mode.has-canvas .motion { opacity:0; }",
+        ".grad { position:absolute; inset:0; z-index:2; opacity:.24; pointer-events:none; transition:opacity .38s ease; }",
+        ".root.canvas-mode .grad { opacity:.10; }",
+        ".canvas-blur { position:absolute; inset:-2px; z-index:3; opacity:0; pointer-events:none; background:rgba(0,0,0,.18); backdrop-filter:blur(12px) saturate(.86) brightness(.68); -webkit-backdrop-filter:blur(12px) saturate(.86) brightness(.68); transition:opacity .38s ease; }",
+        ".root.canvas-mode .canvas-blur { opacity:1; }",
+        ".meta { position:absolute; z-index:5; top:12px; left:12px; right:12px; display:none; grid-template-columns:48px minmax(0,1fr); align-items:center; gap:11px; padding:9px 11px; border:1px solid rgba(255,255,255,.16); border-radius:16px; background:rgba(10,12,18,.48); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:0 8px 26px rgba(0,0,0,.24); }",
+        ".root.canvas-mode .meta { display:grid; }",
+        ".meta-cover { width:48px; height:48px; border-radius:11px; background:#151923 center/cover no-repeat; box-shadow:0 4px 14px rgba(0,0,0,.26); }",
+        ".meta-copy { min-width:0; display:grid; gap:4px; }",
+        ".meta-song { font-size:14px; font-weight:750; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
+        ".meta-artist { font-size:12px; line-height:1.25; color:rgba(255,255,255,.80); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
+        ".canvas-status { position:absolute; z-index:4; left:10%; right:10%; top:62%; text-align:center; font-size:12px; color:rgba(255,255,255,.88); text-shadow:0 1px 8px rgba(0,0,0,.7); display:none; pointer-events:none; }",
+        ".lyrics { position:absolute; z-index:5; left:7%; right:7%; top:50%; transform:translateY(-50%); max-height:34%; overflow:hidden; text-align:center; font-weight:800; font-size:clamp(18px,4.6vw,30px); line-height:1.28; letter-spacing:.01em; white-space:pre-wrap; overflow-wrap:anywhere; color:#fff; text-shadow:0 2px 5px rgba(0,0,0,.82),0 8px 24px rgba(0,0,0,.42); pointer-events:none; display:none; }",
+        ".timeline { position:absolute; z-index:6; left:14px; right:14px; bottom:83px; display:none; align-items:center; gap:8px; font-size:10px; font-variant-numeric:tabular-nums; color:rgba(255,255,255,.9); text-shadow:0 1px 6px rgba(0,0,0,.8); }",
+        ".timeline input { min-width:0; flex:1; width:100%; height:14px; margin:0; accent-color:#fff; cursor:pointer; }",
+        ".volume-row { position:absolute; z-index:6; left:14px; right:14px; bottom:56px; display:none; align-items:center; gap:8px; }",
+        ".volume-row .icon { font-family:'Material Symbols Outlined'; font-size:17px; line-height:1; }",
+        ".volume-row input { flex:1; width:100%; min-width:0; height:14px; margin:0; accent-color:#fff; cursor:pointer; }",
+        ".root.canvas-mode .timeline, .root.canvas-mode .volume-row { display:flex; animation:canvas-controls-in .42s ease .08s both; }",
+        ".ctrls { position:absolute; z-index:7; left:50%; bottom:12px; transform:translateX(-50%); display:flex; align-items:center; justify-content:center; gap:9px; max-width:calc(100% - 20px); padding:8px 10px; border-radius:16px; background:linear-gradient(180deg,rgba(0,0,0,.24),rgba(0,0,0,.60)); border:1px solid rgba(255,255,255,.15); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); transition:background .3s ease,border-color .3s ease; }",
+        ".root.canvas-mode .ctrls { background:rgba(5,7,11,.46); border-color:rgba(255,255,255,.20); }",
+        ".btn { display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; width:38px; height:38px; padding:0; border-radius:12px; border:1px solid rgba(255,255,255,.16); background:rgba(0,0,0,.30); color:#fff; cursor:pointer; transition:transform .16s ease,background .16s ease,border-color .16s ease; }",
+        ".btn:hover { background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.32); } .btn:active { transform:scale(.94); }",
+        ".btn.active { background:rgba(255,255,255,.2); border-color:rgba(255,255,255,.62); }",
+        ".btn .icon { font-family:'Material Symbols Outlined'; font-weight:normal; font-style:normal; font-size:22px; line-height:1; display:inline-block; -webkit-font-smoothing:antialiased; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }",
+        ".root.canvas-mode .canvas-video.show { animation:canvas-video-in .58s cubic-bezier(.2,.8,.2,1) both; }",
+        ".root.canvas-mode .canvas-blur { animation:canvas-blur-in .45s ease .04s both; }",
+        ".root.canvas-mode .meta { animation:canvas-meta-in .46s cubic-bezier(.2,.8,.2,1) .06s both; }",
+        ".root.canvas-mode .lyrics { animation:canvas-lyrics-in .48s cubic-bezier(.2,.8,.2,1) .08s both; }",
+        ".root.canvas-mode .ctrls { animation:canvas-controls-in .42s ease .10s both; }",
+        ".root.canvas-closing .canvas-video { animation:canvas-video-out .30s ease both; }",
+        ".root.canvas-closing .canvas-blur { animation:canvas-blur-out .30s ease both; }",
+        ".root.canvas-closing .meta { animation:canvas-meta-out .26s ease both; }",
+        ".root.canvas-closing .lyrics { animation:canvas-lyrics-out .26s ease both; }",
+        ".root.canvas-closing .timeline, .root.canvas-closing .volume-row, .root.canvas-closing .ctrls { animation:canvas-controls-out .26s ease both; }",
+        "@keyframes canvas-video-in { from { opacity:0; transform:scale(1.045); filter:blur(3px); } to { opacity:1; transform:scale(1); filter:blur(0); } }",
+        "@keyframes canvas-video-out { to { opacity:0; transform:scale(.96); filter:blur(2px); } }",
+        "@keyframes canvas-blur-in { from { opacity:0; } to { opacity:1; } }",
+        "@keyframes canvas-blur-out { to { opacity:0; } }",
+        "@keyframes canvas-meta-in { from { opacity:0; transform:translateY(-9px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }",
+        "@keyframes canvas-meta-out { to { opacity:0; transform:translateY(-6px) scale(.98); } }",
+        "@keyframes canvas-lyrics-in { from { opacity:0; transform:translateY(calc(-50% + 12px)) scale(.97); filter:blur(4px); } to { opacity:1; transform:translateY(-50%) scale(1); filter:blur(0); } }",
+        "@keyframes canvas-lyrics-out { to { opacity:0; transform:translateY(calc(-50% + 8px)) scale(.97); filter:blur(3px); } }",
+        "@keyframes canvas-controls-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }",
+        "@keyframes canvas-controls-out { to { opacity:0; transform:translateY(6px); } }",
+        "@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }"
       ].join("\n");
       doc.head.append(style);
-      const font = doc.createElement('link'); font.rel='stylesheet'; font.href='https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0'; doc.head.append(font);
-      const root = doc.createElement('div'); root.className='root';
-      const bg = doc.createElement('div'); bg.className='bg'; bg.id='dp-bg';
-      const mv = doc.createElement('video'); mv.className='motion'; mv.id='dp-motion';
+      const font = doc.createElement('link');
+      font.rel = 'stylesheet';
+      font.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0';
+      doc.head.append(font);
+
+      const root = doc.createElement('div');
+      root.className = 'root';
+      const bg = doc.createElement('div');
+      bg.className = 'bg';
+      bg.id = 'dp-bg';
+      const mv = doc.createElement('video');
+      mv.className = 'motion';
+      mv.id = 'dp-motion';
       try { mv.muted = true; mv.loop = true; mv.autoplay = true; mv.playsInline = true; mv.controls = false; mv.preload = 'auto'; mv.volume = 0; } catch {}
-      const grad = doc.createElement('div'); grad.className='grad'; grad.id='dp-grad';
-      const panel = doc.createElement('div'); panel.className='panel';
-      const stack = doc.createElement('div'); stack.className='stack';
-      const cov = doc.createElement('div'); cov.className='cover'; cov.id='dp-cover';
-      const ttl = doc.createElement('div'); ttl.className='title'; ttl.id='dp-song';
-      const art = doc.createElement('div'); art.className='by'; art.id='dp-artist';
-      stack.append(cov, ttl, art); panel.append(stack);
-      const lyr = doc.createElement('div'); lyr.className='lyrics'; lyr.id='dp-lyrics';
-      const ctrls = doc.createElement('div'); ctrls.className='ctrls';
-      const rew = doc.createElement('button'); rew.className='btn'; rew.title='Back 10s'; rew.innerHTML='<span class="icon">fast_rewind</span>';
-      const play = doc.createElement('button'); play.className='btn'; play.title='Play/Pause'; play.id='dp-play'; play.innerHTML='<span class="icon">play_arrow</span>';
-      const nextb = doc.createElement('button'); nextb.className='btn'; nextb.title='Forward 10s'; nextb.innerHTML='<span class="icon">fast_forward</span>';
-      ctrls.append(rew, play, nextb);
-      root.append(bg, mv, grad, panel, lyr, ctrls);
+      const canvasVideo = doc.createElement('video');
+      canvasVideo.className = 'canvas-video';
+      canvasVideo.id = 'dp-canvas';
+      try { canvasVideo.muted = true; canvasVideo.defaultMuted = true; canvasVideo.loop = true; canvasVideo.autoplay = true; canvasVideo.playsInline = true; canvasVideo.controls = false; canvasVideo.preload = 'auto'; canvasVideo.volume = 0; } catch {}
+      const grad = doc.createElement('div');
+      grad.className = 'grad';
+      grad.id = 'dp-grad';
+      const blur = doc.createElement('div');
+      blur.className = 'canvas-blur';
+      blur.id = 'dp-canvas-blur';
+
+      const meta = doc.createElement('div');
+      meta.className = 'meta';
+      const cov = doc.createElement('div');
+      cov.className = 'meta-cover';
+      cov.id = 'dp-cover';
+      const metaCopy = doc.createElement('div');
+      metaCopy.className = 'meta-copy';
+      const ttl = doc.createElement('div');
+      ttl.className = 'meta-song';
+      ttl.id = 'dp-song';
+      const art = doc.createElement('div');
+      art.className = 'meta-artist';
+      art.id = 'dp-artist';
+      metaCopy.append(ttl, art);
+      meta.append(cov, metaCopy);
+
+      const status = doc.createElement('div');
+      status.className = 'canvas-status';
+      status.id = 'dp-canvas-status';
+      const lyr = doc.createElement('div');
+      lyr.className = 'lyrics';
+      lyr.id = 'dp-lyrics';
+
+      const timeline = doc.createElement('div');
+      timeline.className = 'timeline';
+      const cur = doc.createElement('span');
+      cur.className = 'current-time';
+      cur.textContent = '0:00';
+      const seek = doc.createElement('input');
+      seek.type = 'range';
+      seek.min = '0';
+      seek.max = '0';
+      seek.step = '0.05';
+      seek.value = '0';
+      seek.setAttribute('aria-label', 'Seek');
+      const dur = doc.createElement('span');
+      dur.className = 'duration';
+      dur.textContent = '0:00';
+      timeline.append(cur, seek, dur);
+
+      const volumeRow = doc.createElement('div');
+      volumeRow.className = 'volume-row';
+      const volumeIcon = doc.createElement('span');
+      volumeIcon.className = 'icon';
+      volumeIcon.textContent = 'volume_up';
+      const volume = doc.createElement('input');
+      volume.type = 'range';
+      volume.min = '0';
+      volume.max = '1';
+      volume.step = '0.01';
+      volume.value = '1';
+      volume.setAttribute('aria-label', 'Volume');
+      volumeRow.append(volumeIcon, volume);
+
+      const ctrls = doc.createElement('div');
+      ctrls.className = 'ctrls';
+      const rew = doc.createElement('button');
+      rew.className = 'btn';
+      rew.title = 'Back 10 seconds';
+      rew.setAttribute('aria-label', 'Back 10 seconds');
+      rew.innerHTML = '<span class="icon">fast_rewind</span>';
+      const play = doc.createElement('button');
+      play.className = 'btn';
+      play.title = 'Play/Pause';
+      play.setAttribute('aria-label', 'Play/Pause');
+      play.id = 'dp-play';
+      play.innerHTML = '<span class="icon">play_arrow</span>';
+      const nextb = doc.createElement('button');
+      nextb.className = 'btn';
+      nextb.title = 'Forward 10 seconds';
+      nextb.setAttribute('aria-label', 'Forward 10 seconds');
+      nextb.innerHTML = '<span class="icon">fast_forward</span>';
+      const lyricsBtn = doc.createElement('button');
+      lyricsBtn.className = 'btn lyrics-toggle';
+      lyricsBtn.title = 'Open Spotify Canvas lyrics';
+      lyricsBtn.setAttribute('aria-label', 'Open Spotify Canvas lyrics');
+      lyricsBtn.setAttribute('aria-pressed', 'false');
+      lyricsBtn.innerHTML = '<span class="icon">lyrics</span>';
+      lyricsBtn.style.display = state.spotifyCanvasPip ? 'inline-flex' : 'none';
+      ctrls.append(rew, play, nextb, lyricsBtn);
+
+      root.append(bg, mv, canvasVideo, grad, blur, meta, status, lyr, timeline, volumeRow, ctrls);
       doc.body.append(root);
-      rew.addEventListener('click', ()=> { const a=currentAudio(); a.currentTime=Math.max(0,a.currentTime-10); });
-      play.addEventListener('click', ()=> { ensureAudio(); const a=currentAudio(); a.paused? playSong() : pauseSong(); });
-      nextb.addEventListener('click', ()=> { const a=currentAudio(); a.currentTime=Math.min((a.duration||0), a.currentTime+10); });
-      pw.addEventListener('resize', ()=> { try { updateDocPipGradient(); } catch {} });
-      pw.addEventListener('unload', ()=> { try { cancelAnimationFrame(docPipVizRAF); } catch {} docPipVizRAF=0; docPipWin=null; docPipEls=null; });
-      docPipEls = { bg, motion: mv, grad, playBtn: play, playIcon: play.querySelector('.icon'), cover: cov, song: ttl, artist: art, lyrics: lyr, root };
+      rew.addEventListener('click', () => {
+        try { const a = currentAudio(); a.currentTime = Math.max(0, (a.currentTime || 0) - 10); updateDocPipUI(); } catch {}
+      });
+      play.addEventListener('click', () => {
+        try {
+          ensureAudio();
+          const a = currentAudio();
+          if (a.paused) {
+            const result = a.play();
+            if (result && typeof result.catch === 'function') result.catch(() => {});
+          } else pauseSong();
+        } catch {}
+      });
+      nextb.addEventListener('click', () => {
+        try {
+          const a = currentAudio();
+          a.currentTime = Math.min(Number.isFinite(a.duration) ? a.duration : Infinity, (a.currentTime || 0) + 10);
+          updateDocPipUI();
+        } catch {}
+      });
+      lyricsBtn.addEventListener('click', toggleDocPipCanvasLyrics);
+      seek.addEventListener('input', () => {
+        try {
+          const a = currentAudio();
+          const target = Number(seek.value);
+          if (Number.isFinite(target)) a.currentTime = Math.max(0, target);
+          updateDocPipUI();
+        } catch {}
+      });
+      volume.addEventListener('input', () => {
+        try {
+          const n = Math.max(0, Math.min(1, Number(volume.value)));
+          if (ui.volume) ui.volume.value = String(n);
+          setUserVolumeBase(n, { persist:false, updateUi:true });
+          volumeIcon.textContent = n <= 0.001 ? 'volume_off' : (n < .5 ? 'volume_down' : 'volume_up');
+        } catch {}
+      });
+
+      pw.addEventListener('resize', () => { try { updateDocPipGradient(); } catch {} });
+      pw.addEventListener('pagehide', () => {
+        try { if (docPipCanvasCloseTimer) window.clearTimeout(docPipCanvasCloseTimer); } catch {}
+        docPipCanvasCloseTimer = 0;
+        try { docPipCanvasAbortController?.abort(); } catch {}
+        docPipCanvasAbortController = null;
+        docPipCanvasRequestKey = '';
+        docPipCanvasLyricsOpen = false;
+        docPipCanvasRestoreSize = null;
+        try { cancelAnimationFrame(docPipVizRAF); } catch {}
+        docPipVizRAF = 0;
+        docPipWin = null;
+        docPipEls = null;
+      }, { once:true });
+
+      docPipEls = {
+        bg, motion:mv, canvasVideo, grad, blur, playBtn:play, playIcon:play.querySelector('.icon'),
+        cover:cov, song:ttl, artist:art, lyrics:lyr, root, lyricsBtn, seek, currentTime:cur,
+        duration:dur, volume, volumeIcon, canvasStatus:status
+      };
+      updateDocPipTimeline();
     }
-    async function createPipGradientFromImage(url, doc){
+        async function createPipGradientFromImage(url, doc){
       return await new Promise((resolve)=>{
         try {
           const img = new Image(); img.crossOrigin='anonymous';
@@ -16765,7 +16950,7 @@ void main(){
       });
     }
     async function updateDocPipGradient(){ if (!docPipWin || !docPipEls) return; try { const t = state.tracks[state.current]; const cov = t?.appleCoverUrl || t?.coverUrl; if (!cov) return; const grad = await createPipGradientFromImage(cov, docPipWin.document); if (docPipEls.grad) docPipEls.grad.style.background = grad; } catch {} }
-    function playSong(){ try { ensureAudio(); const a=currentAudio(); a.paused? playSong() : pauseSong(); } catch {} }
+    function playSong(){ try { ensureAudio(); const a=currentAudio(); if (a.paused) { const p = a.play(); if (p && typeof p.catch === 'function') p.catch(()=>{}); } else pauseSong(); } catch {} }
     function pauseSong(){ try { currentAudio().pause(); } catch {} }
     async function openDocPip(){
       if (!supportsDocPip()) { return; }
@@ -16775,18 +16960,48 @@ void main(){
         docPipWin = pw; buildDocPip(pw); updateDocPipUI(); startDocPipViz();
       } catch {}
     }
+    function docPipTrackIdentity(t){
+      try {
+        const id = t && (t.appleId || t.catalogId || t.isrc);
+        if (id) return 'id:' + String(id);
+        return 'meta:' + [t && t.title, t && t.artist, t && t.album].map(v => String(v || '').trim().toLowerCase()).join('\u0000');
+      } catch { return 'meta:unknown'; }
+    }
     function docPipLyricLineFor(t, timeSec){
       try {
         if (!t) return '';
-        if (t.hasLrc && Array.isArray(t.lrc) && t.lrc.length){
-          const arr = t.lrc; const N = arr.length;
-          const lead = 0.12;
-          let i = 0; while (i+1 < N && arr[i+1].t <= (timeSec||0) + lead) i++;
-          return String(arr[i]?.text || '').trim();
+        const sec = Math.max(0, Number(timeSec) || 0);
+        if (Array.isArray(t.lrc) && t.lrc.length) {
+          const arr = t.lrc;
+          let i = 0;
+          while (i + 1 < arr.length && Number(arr[i + 1] && arr[i + 1].t) <= sec + 0.12) i++;
+          const text = String(arr[i] && arr[i].text || '').trim();
+          if (text) return text;
+        }
+        if (Array.isArray(t.__amllLines) && t.__amllLines.length) {
+          let active = '';
+          for (const line of t.__amllLines) {
+            if (!line || typeof line !== 'object') continue;
+            let startSec = NaN;
+            if (Number.isFinite(Number(line.startTime))) startSec = Number(line.startTime) / 1000;
+            else if (Number.isFinite(Number(line.start))) startSec = Number(line.start);
+            else if (Number.isFinite(Number(line.begin))) startSec = Number(line.begin);
+            else if (Number.isFinite(Number(line.t))) startSec = Number(line.t);
+            if (!Number.isFinite(startSec) || startSec > sec + 0.12) continue;
+            let text = String(line.text || line.content || line.lyric || '').trim();
+            if (!text && Array.isArray(line.words)) {
+              text = line.words.map(word => String(word && (word.word || word.text || word.content) || '')).join('').trim();
+            }
+            if (!text && Array.isArray(line.segments)) {
+              text = line.segments.map(segment => String(segment && (segment.text || segment.word) || '')).join('').trim();
+            }
+            if (text) active = text;
+          }
+          if (active) return active;
         }
         if (t.lyrics && String(t.lyrics).trim()) {
           const s = String(t.lyrics).trim();
-          const first = s.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)[0];
+          const first = s.split(/\r?\n/).map(x => x.trim()).filter(Boolean)[0];
           return (first || s).slice(0, 120);
         }
       } catch {}
@@ -16796,15 +17011,211 @@ void main(){
       try {
         if (!docPipWin || docPipWin.closed || !docPipEls || !docPipEls.lyrics) return;
         const t = state.tracks[state.current];
-        const hasTimed = !!(t && t.hasLrc && Array.isArray(t.lrc) && t.lrc.length);
-        const hasUnsynced = !!(t && t.lyrics && String(t.lyrics).trim());
-        const shouldShow = !!(state.lyricsOn && (hasTimed || hasUnsynced));
-        docPipEls.lyrics.style.display = shouldShow ? '' : 'none';
-        if (!shouldShow) { docPipEls.lyrics.textContent = ''; return; }
-        docPipEls.lyrics.textContent = docPipLyricLineFor(t, timeSec||0) || '';
+        const timed = !!(t && ((Array.isArray(t.lrc) && t.lrc.length) || (Array.isArray(t.__amllLines) && t.__amllLines.length)));
+        const unsynced = !!(t && t.lyrics && String(t.lyrics).trim());
+        const visibleByMode = state.spotifyCanvasPip ? docPipCanvasLyricsOpen : !!state.lyricsOn;
+        const line = docPipLyricLineFor(t, timeSec);
+        const shouldShow = !!(visibleByMode && (timed || unsynced) && line);
+        docPipEls.lyrics.style.display = shouldShow ? 'block' : 'none';
+        docPipEls.lyrics.textContent = shouldShow ? line : '';
+        if (docPipEls.lyricsBtn) {
+          const active = !!(state.spotifyCanvasPip && docPipCanvasLyricsOpen && !docPipEls.root.classList.contains('canvas-closing'));
+          docPipEls.lyricsBtn.classList.toggle('active', active);
+          docPipEls.lyricsBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+          docPipEls.lyricsBtn.title = active ? 'Close Spotify Canvas lyrics' : 'Open Spotify Canvas lyrics';
+          docPipEls.lyricsBtn.setAttribute('aria-label', docPipEls.lyricsBtn.title);
+        }
       } catch {}
     }
-    function updateDocPipUI(){
+    function formatDocPipTime(value){
+      const seconds = Math.max(0, Math.floor(Number(value) || 0));
+      return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+    }
+    function updateDocPipTimeline(){
+      try {
+        if (!docPipWin || docPipWin.closed || !docPipEls) return;
+        const a = currentAudio();
+        const duration = Number.isFinite(a.duration) && a.duration > 0 ? a.duration : 0;
+        const time = Number.isFinite(a.currentTime) && a.currentTime > 0 ? a.currentTime : 0;
+        if (docPipEls.seek) {
+          docPipEls.seek.max = String(duration);
+          docPipEls.seek.value = String(Math.min(time, duration || time));
+          docPipEls.seek.disabled = duration <= 0;
+        }
+        if (docPipEls.currentTime) docPipEls.currentTime.textContent = formatDocPipTime(time);
+        if (docPipEls.duration) docPipEls.duration.textContent = formatDocPipTime(duration);
+        if (docPipEls.volume) {
+          const value = ui.volume ? Number(ui.volume.value) : Number(a.volume);
+          const volume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+          docPipEls.volume.value = String(volume);
+          if (docPipEls.volumeIcon) docPipEls.volumeIcon.textContent = volume <= .001 ? 'volume_off' : (volume < .5 ? 'volume_down' : 'volume_up');
+        }
+      } catch {}
+    }
+    function setDocPipCanvasSource(url, key, message){
+      try {
+        if (!docPipEls || !docPipEls.canvasVideo) return;
+        const video = docPipEls.canvasVideo;
+        const normalized = String(url || '').trim();
+        if (!normalized) {
+          try { video.pause(); } catch {}
+          try { video.removeAttribute('src'); video.load(); } catch {}
+          video.dataset.src = '';
+          video.dataset.trackKey = key || '';
+          video.classList.remove('show');
+          docPipEls.root.classList.remove('has-canvas');
+          if (docPipEls.canvasStatus) {
+            docPipEls.canvasStatus.textContent = String(message || '');
+            docPipEls.canvasStatus.style.display = (docPipEls.root.classList.contains('canvas-mode') && message) ? 'block' : 'none';
+          }
+          return;
+        }
+        let safeUrl = normalized;
+        try {
+          const parsed = new URL(normalized, location.href);
+          if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return;
+          safeUrl = parsed.href;
+        } catch { return; }
+        if (video.dataset.src !== safeUrl) {
+          try { video.pause(); } catch {}
+          try { video.removeAttribute('src'); video.load(); } catch {}
+          video.src = safeUrl;
+          video.dataset.src = safeUrl;
+          video.dataset.trackKey = key || '';
+          try { video.load(); } catch {}
+        }
+        video.classList.add('show');
+        docPipEls.root.classList.add('has-canvas');
+        if (docPipEls.canvasStatus) {
+          docPipEls.canvasStatus.textContent = '';
+          docPipEls.canvasStatus.style.display = 'none';
+        }
+        if (docPipEls.root.classList.contains('canvas-mode')) {
+          try { const p = video.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch {}
+        } else {
+          try { video.pause(); } catch {}
+        }
+      } catch {}
+    }
+    async function resolveDocPipCanvasForTrack(t){
+      if (!state.spotifyCanvasPip || !t || !docPipWin || docPipWin.closed || !docPipEls) return;
+      const key = docPipTrackIdentity(t);
+      if (docPipCanvasCache.has(key)) {
+        const cachedUrl = docPipCanvasCache.get(key);
+        setDocPipCanvasSource(cachedUrl, key, cachedUrl ? '' : 'No Spotify Canvas was found for this track.');
+        return;
+      }
+      if (docPipCanvasRequestKey === key) return;
+      try { docPipCanvasAbortController?.abort(); } catch {}
+      const controller = new AbortController();
+      docPipCanvasAbortController = controller;
+      docPipCanvasRequestKey = key;
+      setDocPipCanvasSource('', key, 'Looking for Spotify Canvas…');
+      const audio = currentAudio();
+      const cover = t.appleCoverUrl || t.coverUrl || t.artworkUrl || '';
+      const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? Math.round(audio.duration * 1000) : null;
+      const payload = {
+        title: String(t.title || t.file?.name || ''),
+        artist: String(t.artist || ''),
+        album: String(t.album || ''),
+        albumArtist: String(t.albumArtist || t.album_artist || ''),
+        composer: String(t.composer || ''),
+        genre: String(t.genre || ''),
+        contentRating: String(t.contentRating || ''),
+        catalogId: String(t.appleId || t.catalogId || t.catalog_id || ''),
+        durationMs: duration,
+        isrc: String(t.isrc || ''),
+        releaseYear: t.year || t.releaseYear || null,
+        trackNumber: t.trackNo || t.trackNumber || null,
+        discNumber: t.discNo || t.discNumber || t.disc || null,
+        artworkUrl: String(cover)
+      };
+      try {
+        const response = await fetch(DOC_PIP_CANVAS_API, {
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify(payload),
+          signal:controller.signal
+        });
+        const raw = await response.text();
+        let data = null;
+        try { data = JSON.parse(raw); } catch { throw new Error('Canvas API returned invalid JSON (' + response.status + ')'); }
+        if (!response.ok) throw new Error(data && data.reason || ('Canvas API ' + response.status));
+        const canvasUrl = String(data && data.canvasUrl || '').trim();
+        if (controller.signal.aborted || key !== docPipCanvasRequestKey || !docPipWin || docPipWin.closed || state.tracks[state.current] !== t) return;
+        docPipCanvasCache.set(key, canvasUrl);
+        while (docPipCanvasCache.size > 48) {
+          const oldest = docPipCanvasCache.keys().next().value;
+          if (!oldest) break;
+          docPipCanvasCache.delete(oldest);
+        }
+        setDocPipCanvasSource(canvasUrl, key, canvasUrl ? '' : 'No Spotify Canvas was found for this track.');
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (key !== docPipCanvasRequestKey || !docPipWin || docPipWin.closed) return;
+        docPipCanvasCache.set(key, '');
+        setDocPipCanvasSource('', key, 'Spotify Canvas is unavailable right now.');
+        try { console.warn('[MusAudio Canvas PiP]', error); } catch {}
+      } finally {
+        if (docPipCanvasAbortController === controller) docPipCanvasAbortController = null;
+      }
+    }
+    function closeDocPipCanvasLyrics(){
+      try {
+        if (!docPipEls || !docPipWin || docPipWin.closed) {
+          docPipCanvasLyricsOpen = false;
+          return;
+        }
+        if (docPipCanvasCloseTimer) window.clearTimeout(docPipCanvasCloseTimer);
+        docPipCanvasCloseTimer = 0;
+        const root = docPipEls.root;
+        if (!root.classList.contains('canvas-mode')) {
+          docPipCanvasLyricsOpen = false;
+          return;
+        }
+        root.classList.add('canvas-closing');
+        docPipCanvasLyricsOpen = false;
+        try {
+          const size = docPipCanvasRestoreSize || { width:400, height:400 };
+          docPipWin.resizeTo(size.width, size.height);
+        } catch {}
+        docPipCanvasCloseTimer = window.setTimeout(() => {
+          try { root.classList.remove('canvas-mode', 'expanded', 'canvas-closing'); } catch {}
+          try { if (docPipEls && docPipEls.canvasVideo) docPipEls.canvasVideo.pause(); } catch {}
+          docPipCanvasRestoreSize = null;
+          docPipCanvasCloseTimer = 0;
+          try { updateDocPipLyrics(currentAudio().currentTime || 0); } catch {}
+        }, 310);
+      } catch { docPipCanvasLyricsOpen = false; }
+    }
+    function toggleDocPipCanvasLyrics(){
+      try {
+        if (!state.spotifyCanvasPip || !docPipWin || docPipWin.closed || !docPipEls) return;
+        const root = docPipEls.root;
+        if (root.classList.contains('canvas-mode') && !root.classList.contains('canvas-closing')) {
+          closeDocPipCanvasLyrics();
+          return;
+        }
+        if (docPipCanvasCloseTimer) window.clearTimeout(docPipCanvasCloseTimer);
+        docPipCanvasCloseTimer = 0;
+        docPipCanvasLyricsOpen = true;
+        root.classList.remove('canvas-closing');
+        root.classList.add('expanded', 'canvas-mode');
+        try {
+          if (!docPipCanvasRestoreSize) {
+            docPipCanvasRestoreSize = {
+              width:Math.max(280, Number(docPipWin.innerWidth) || 400),
+              height:Math.max(240, Number(docPipWin.innerHeight) || 400)
+            };
+          }
+          docPipWin.resizeTo(460, 780);
+        } catch {}
+        try { if (docPipEls.lyricsBtn) docPipEls.lyricsBtn.classList.add('active'); } catch {}
+        updateDocPipUI();
+        void resolveDocPipCanvasForTrack(state.tracks[state.current]);
+      } catch {}
+    }
+        function updateDocPipUI(){
       if (!docPipWin || docPipWin.closed || !docPipEls) return;
       const t = state.tracks[state.current];
       if (!t) return;
@@ -16836,6 +17247,11 @@ void main(){
       if (docPipEls.partist) docPipEls.partist.textContent = t.artist||'';
       try { if (docPipEls.playIcon) docPipEls.playIcon.textContent = currentAudio().paused? 'play_arrow':'pause'; } catch {}
       try { updateDocPipGradient(); } catch {}
+      try { updateDocPipTimeline(); } catch {}
+      try {
+        if (docPipEls.lyricsBtn) docPipEls.lyricsBtn.style.display = state.spotifyCanvasPip ? 'inline-flex' : 'none';
+        if (state.spotifyCanvasPip && docPipEls.root.classList.contains('canvas-mode')) void resolveDocPipCanvasForTrack(t);
+      } catch {}
       try { updateDocPipLyrics(currentAudio().currentTime||0); } catch {}
     }
 
@@ -17538,6 +17954,16 @@ void main(){
       if (ui.eqPreset) ui.eqPreset.addEventListener('change', ()=> { applyEqPreset(ui.eqPreset.value); persist(); });
       if (ui.spatialToggle) ui.spatialToggle.addEventListener('change', ()=> { setSpatialEnabled(ui.spatialToggle.checked); persist(); });
       if (ui.fadePlaybackToggle) ui.fadePlaybackToggle.addEventListener('change', ()=> { state.fadePlayback = !!ui.fadePlaybackToggle.checked; persist(); });
+      if (ui.spotifyCanvasPipToggle) ui.spotifyCanvasPipToggle.addEventListener('change', ()=> {
+        state.spotifyCanvasPip = !!ui.spotifyCanvasPipToggle.checked;
+        persist();
+        try {
+          if (docPipWin && !docPipWin.closed && docPipEls) {
+            if (!state.spotifyCanvasPip) closeDocPipCanvasLyrics();
+            updateDocPipUI();
+          }
+        } catch {}
+      });
       if (ui.clock12h) ui.clock12h.addEventListener('change', ()=> { state.clock12h = ui.clock12h.checked; persist(); try { const el = document.getElementById('focusClock'); if (el) el.textContent = formatClock(); } catch {} try { updateIdleHud(); } catch {} });
       if (ui.weatherUnitF) ui.weatherUnitF.addEventListener('change', ()=> { state.weatherUnitF = ui.weatherUnitF.checked; persist(); try { refreshIdleWeatherOnce(); } catch {} });
       if (ui.emailProvider) ui.emailProvider.addEventListener('change', ()=> { state.emailProvider = ui.emailProvider.value || 'gmail'; persist(); });
@@ -18714,7 +19140,7 @@ void main(){
 
     let settingsFileSaveTimer = 0;
     let settingsAutoSaveTimer = 0;
-    function collectSettings(){ return { themeId: state.themeId, design: state.design, shuffle: state.shuffle, loop: state.loop, automix: state.automix, eqEnable: ui.eqEnable.checked, eqPreset: ui.eqPreset?.value, eqAuto: ui.eqAuto?.checked, eqBandsCount: parseInt(ui.eqBandsCount?.value||EQ_BANDS,10), season: state.dynamicSeason, bgPreset: state.bgPreset || 'mesh', spatial: ui.spatialToggle?.checked, fadePlayback: !!state.fadePlayback, speed: state.speed, tempo: state.tempo, pitchPreserve: state.pitchPreserve, perfMode: state.perfMode, jsmediatagsSimp: state.jsmediatagsSimp, persistFolderEnabled: !!state.persistFolderEnabled, openOnLogin: state.openOnLogin, emailProvider: state.emailProvider || 'gmail', titleAnimMode: state.titleAnimMode || 'none', tabTitleTemplate: state.tabTitleTemplate || '', weatherUnitF: state.weatherUnitF, weatherLocation: state.weatherLocation, weatherLat: state.weatherLat, weatherLon: state.weatherLon, weatherCountryCode: state.weatherCountryCode, weatherLastLocationText: state.weatherLastLocationText, weatherGeoAsked: !!state.weatherGeoAsked, clock12h: state.clock12h, cameraBlackout: !!(state.cameraBlackout && state.cameraBlackout.enabled), demucsBackendBaseUrl: demucsApiBase() || '', codename: state.codename || '', libraryMode: state.libraryMode || 'local' }; }
+    function collectSettings(){ return { themeId: state.themeId, design: state.design, shuffle: state.shuffle, loop: state.loop, automix: state.automix, eqEnable: ui.eqEnable.checked, eqPreset: ui.eqPreset?.value, eqAuto: ui.eqAuto?.checked, eqBandsCount: parseInt(ui.eqBandsCount?.value||EQ_BANDS,10), season: state.dynamicSeason, bgPreset: state.bgPreset || 'mesh', spatial: ui.spatialToggle?.checked, fadePlayback: !!state.fadePlayback, spotifyCanvasPip: !!state.spotifyCanvasPip, speed: state.speed, tempo: state.tempo, pitchPreserve: state.pitchPreserve, perfMode: state.perfMode, jsmediatagsSimp: state.jsmediatagsSimp, persistFolderEnabled: !!state.persistFolderEnabled, openOnLogin: state.openOnLogin, emailProvider: state.emailProvider || 'gmail', titleAnimMode: state.titleAnimMode || 'none', tabTitleTemplate: state.tabTitleTemplate || '', weatherUnitF: state.weatherUnitF, weatherLocation: state.weatherLocation, weatherLat: state.weatherLat, weatherLon: state.weatherLon, weatherCountryCode: state.weatherCountryCode, weatherLastLocationText: state.weatherLastLocationText, weatherGeoAsked: !!state.weatherGeoAsked, clock12h: state.clock12h, cameraBlackout: !!(state.cameraBlackout && state.cameraBlackout.enabled), demucsBackendBaseUrl: demucsApiBase() || '', codename: state.codename || '', libraryMode: state.libraryMode || 'local' }; }
 
     function persist() {
       const data = collectSettings();
@@ -18772,6 +19198,8 @@ void main(){
         if (s.loop) { state.loop = true; ui.loopBtn?.classList.toggle('active', true); audioA.loop = true; audioB.loop = true; }
         if (s.automix) { state.automix = true; ui.automixToggle.checked = true; }
         if (typeof s.fadePlayback==='boolean') { state.fadePlayback = !!s.fadePlayback; if (ui.fadePlaybackToggle) ui.fadePlaybackToggle.checked = state.fadePlayback; }
+        if (typeof s.spotifyCanvasPip === 'boolean') state.spotifyCanvasPip = !!s.spotifyCanvasPip;
+        if (ui.spotifyCanvasPipToggle) ui.spotifyCanvasPipToggle.checked = !!state.spotifyCanvasPip;
         if (s.eqBandsCount) { ui.eqBandsCount.value = String(s.eqBandsCount); rebuildEq(s.eqBandsCount); }
         if (s.eqEnable) { ui.eqEnable.checked = true; refreshEqRouting(); setEqUiEnabled(true); }
         if (s.eqPreset) { if (ui.eqPreset) { ui.eqPreset.value = s.eqPreset; applyEqPreset(s.eqPreset); } }
